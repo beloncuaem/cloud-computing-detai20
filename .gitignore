@@ -1,0 +1,21 @@
+# Environment & Secrets
+.env
+*.pem
+*.key
+vault-init.json
+*.tfstate
+*.tfstate.backup
+
+# Python / Runtime
+__pycache__/
+*.pyc
+venv/
+.venv/
+
+# Logs & OS files
+*.log
+.DS_Store
+Thumbs.db
+
+# Benchmark raw outputs
+bench/results/*.csv

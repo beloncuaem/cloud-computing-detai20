@@ -1,0 +1,5 @@
+title = "Gitleaks config"
+
+[allowlist]
+description = "Allowlist for placeholders"
+regexes = ['EXAMPLE', 'your_password_here']
