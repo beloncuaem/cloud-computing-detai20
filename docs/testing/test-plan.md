@@ -371,7 +371,7 @@ Invoke-RestMethod -Method Post -Uri "$API/admin/rotation/database" -Headers $Adm
 ```powershell
 docker compose exec -T postgres psql -U postgres -d encryption_db -c `
   "SELECT rolname, rolvaliduntil FROM pg_roles
-   WHERE rolname LIKE 'v-app-role-%' ORDER BY rolvaliduntil DESC;"
+   WHERE rolname LIKE 'v-%app-role-%' ORDER BY rolvaliduntil DESC;"
 ```
 
 **Kỳ vọng:** API trả `status = rotated`, `new_lease_duration_seconds`; k6 không có lỗi 5xx; role mới xuất hiện; role cũ còn hiệu lực đến khi lease hết hạn (overlap có chủ đích). Ghi lại thời điểm rotation và cửa sổ ảnh hưởng.
