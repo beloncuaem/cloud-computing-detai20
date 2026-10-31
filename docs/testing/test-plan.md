@@ -134,28 +134,37 @@ docker compose exec -T postgres psql -U postgres -d encryption_db -c `
 **Các bước:**
 
 ```powershell
+# Tạo bản ghi với giá trị dò duy nhất, không trùng fixture trong tests/
+$TestValue = "t02-0901234567"
+$t = Invoke-RestMethod -Method Post -Uri "$API/records" -Headers $Headers `
+  -Body (@{ record_type = "plaintext_probe"; value = $TestValue } | ConvertTo-Json)
+
 # 1) Tìm chuỗi test trong bảng
 docker compose exec -T postgres psql -U postgres -d encryption_db -c `
   "SELECT count(*) AS plaintext_hits FROM sensitive_records
-   WHERE encode(ciphertext, 'escape') LIKE '%0901234567%'
-      OR encrypted_dek LIKE '%0901234567%';"
+   WHERE encode(ciphertext, 'escape') LIKE '%$TestValue%'
+      OR encrypted_dek LIKE '%$TestValue%';"
 
 # 2) Tìm trong pg_dump
 docker compose exec -T postgres sh -c `
-  "pg_dump -U postgres -d encryption_db | grep -a -c '0901234567' || true"
+  "pg_dump -U postgres -d encryption_db | grep -a -c '$TestValue' || true"
 
 # 3) Tìm trong thư mục ứng dụng và log container
 docker compose exec -T api sh -c `
-  "grep -R -a '0901234567' /app /tmp 2>/dev/null | head -n 5 || true"
+  "grep -R -a '$TestValue' /app /tmp 2>/dev/null | head -n 5 || true"
 
 # 4) Tìm trong image (không mount volume dữ liệu)
 docker run --rm detai20-api:local sh -c `
-  "grep -R -a '0901234567' /app 2>/dev/null | head -n 5 || true"
+  "grep -R -a '$TestValue' /app 2>/dev/null | head -n 5 || true"
+
+# Dọn bản ghi test
+docker compose exec -T postgres psql -U postgres -d encryption_db -c `
+  "DELETE FROM sensitive_records WHERE id = '$($t.id)';"
 ```
 
 **Kỳ vọng:** cả bốn lệnh trả `0` hoặc không có dòng kết quả. Nếu có, dừng và điều tra ngay.
 
-**Lưu ý:** `grep -c` trả 0 khi không khớp; `|| true` để PowerShell không dừng khi grep trả mã 1.
+**Lưu ý:** không dùng `0901234567` làm chuỗi dò vì giá trị này xuất hiện trong `tests/test_encryption_unit.py`; đó là fixture, không phải dữ liệu runtime. Dùng `t02-0901234567` để tránh false positive. `grep -c` trả 0 khi không khớp; `|| true` để PowerShell không dừng khi grep trả mã 1.
 
 **Bằng chứng:** ảnh 4 kết quả, ghi rõ ngày và ID bản ghi test.
 
