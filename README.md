@@ -14,8 +14,19 @@
 - `chore:` Cấu hình hạ tầng, công cụ
 
 ## Cấu trúc thư mục
-- `app/`: Mã nguồn ứng dụng REST API
-- `infra/`: File cấu hình Docker Compose, Vault, Postgres, TLS
-- `tests/`: Kịch bản kiểm thử bảo mật & xoay vòng khóa
-- `bench/`: Kịch bản & kết quả đo lường hiệu năng
-- `docs/`: Báo cáo kỹ thuật và ảnh minh chứng
+- `student2_project_windows/`: mã nguồn FastAPI, SQL, script Vault (bản Windows native của SV2) và Dockerfile dự phòng
+- `docker-compose.yml`: stack lab dự phòng (PostgreSQL + Vault dev + API)
+- `bench/`: kịch bản k6, script phân tích CSV và kết quả thô
+- `docs/`: báo cáo, ảnh bằng chứng, kế hoạch kiểm thử và hướng dẫn hạ tầng
+- `scripts/`: smoke test PowerShell
+- `.github/workflows/`: CI security gate (Gitleaks + unit tests)
+
+## Chạy nhanh bằng Docker (phương án dự phòng)
+Stack này dùng Vault dev mode để kiểm thử trong lúc chờ hạ tầng Vault file storage + TLS của SV1. Không dùng cho production hoặc dữ liệu thật.
+
+```powershell
+docker compose up -d --build
+powershell -ExecutionPolicy Bypass -File scripts/smoke-test.ps1
+```
+
+Chi tiết vận hành: `docs/infra/local-stack.md`. Kế hoạch kiểm thử T01–T16: `docs/testing/test-plan.md`. Hướng dẫn Windows native gốc: `student2_project_windows/README_VI.md`.
