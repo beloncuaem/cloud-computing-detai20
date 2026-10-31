@@ -1,9 +1,12 @@
 import http from 'k6/http';
-import { check } from 'k6';
+import { check, sleep } from 'k6';
 
 // Mixed workload for the envelope-encryption API.
 // 70% create, 30% read. Read uses one record created in setup() so the
 // workload does not measure 404s. All values are synthetic demo data.
+//
+// SLEEP (seconds, default 0) paces iterations; use SLEEP>0 for the T16
+// false-positive test so the normal load stays below the alert threshold.
 //
 // Run through Docker so the host does not need k6 installed:
 //   docker run --rm -v "${PWD}:/work" -w /work grafana/k6:0.54.0 run `
@@ -14,6 +17,7 @@ import { check } from 'k6';
 
 const BASE_URL = (__ENV.BASE_URL || 'http://127.0.0.1:8000').replace(/\/+$/, '');
 const API_KEY = __ENV.API_KEY || '';
+const SLEEP = Number(__ENV.SLEEP || 0);
 
 if (!API_KEY) {
   throw new Error('Set API_KEY to the demo API key (see student2_project_windows/.env.example)');
@@ -71,5 +75,8 @@ export default function (data) {
       tags: { operation: 'read' },
     });
     check(res, { 'read 200': (r) => r.status === 200 });
+  }
+  if (SLEEP > 0) {
+    sleep(SLEEP);
   }
 }

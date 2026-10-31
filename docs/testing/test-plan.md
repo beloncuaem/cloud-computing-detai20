@@ -258,7 +258,7 @@ docker compose exec -T api python scripts/check_approle_privileges.py
 Script kiểm tra `sys/capabilities-self` cho các path:
 
 - Được phép: `transit/datakey/plaintext/app-data-key`, `transit/decrypt/app-data-key`, `database/creds/app-role`.
-- Bị cấm: `transit/keys/app-data-key/rotate`, `transit/export/app-data-key`, `transit/keys/app-data-key/config`.
+- Bị cấm: `transit/keys/app-data-key/rotate`, `transit/keys/app-data-key` (đọc metadata/version), `transit/export/app-data-key`, `transit/keys/app-data-key/config`.
 
 Ngoài ra, thử gọi trực tiếp (lệnh một dòng; lỗi 403 sẽ làm Python thoát khác 0 — đó là kết quả mong đợi):
 
@@ -266,7 +266,7 @@ Ngoài ra, thử gọi trực tiếp (lệnh một dòng; lỗi 403 sẽ làm Py
 docker compose exec -T api python -c "import json,hvac; from pathlib import Path; c=json.loads(Path('/credentials/vault-credentials.json').read_text()); v=hvac.Client(url='http://vault:8200'); v.auth.approle.login(role_id=c['role_id'], secret_id=c['secret_id']); v.secrets.transit.rotate_key(name='app-data-key', mount_point='transit')"
 ```
 
-**Kỳ vọng:** checker PASS; rotate/export bị từ chối (403). Hiện tại policy trong `setup_vault.py` còn cấp `update` cho path rotate → **D-01**, checker sẽ FAIL cho đến khi SV2 sửa.
+**Kỳ vọng:** checker PASS; rotate/export bị từ chối (403). Hiện tại policy trong `setup_vault.py` còn cấp `update` cho path rotate và `read` cho metadata khóa → **D-01** (đúng như output của checker), nên checker sẽ FAIL cho đến khi SV2 sửa. Sau khi sửa, phải chạy lại `vault-init` để ghi policy mới rồi chạy lại checker; đọc metadata khóa cũng không cần thiết cho luồng datakey/decrypt.
 
 **Bằng chứng:** ảnh checker PASS/FAIL; ảnh lỗi 403 đã che token.
 
@@ -303,8 +303,8 @@ $r = Invoke-RestMethod -Method Post -Uri "$API/records" -Headers $Headers `
 $meta1 = Invoke-RestMethod -Uri "$API/records/$($r.id)/metadata" -Headers $Headers
 $meta1.kek_version
 
-# 2) Xoay KEK
-Invoke-RestMethod -Method Post -Uri "$API/admin/rotation/transit-key" -Headers $Admin
+# 2) Xoay KEK bằng danh tính operator (root trong lab), KHÔNG dùng AppRole của app
+docker compose exec -T vault vault write -f transit/keys/app-data-key/rotate
 
 # 3) Bản ghi cũ vẫn đọc được bằng version cũ
 Invoke-RestMethod -Uri "$API/records/$($r.id)" -Headers $Headers
@@ -322,6 +322,8 @@ docker compose exec -T vault vault write transit/keys/app-data-key/config min_de
 # 7) Một ciphertext v1 cũ phải bị từ chối
 docker compose exec -T vault vault write transit/decrypt/app-data-key ciphertext="vault:v1:<ciphertext_cu>"
 ```
+
+Sau khi sửa D-01, AppRole của app không còn quyền rotate; endpoint `/admin/rotation/transit-key` và `rotate_transit_key.py` phải chuyển sang danh tính operator riêng hoặc bị bỏ. Vì vậy ca này dùng lệnh `vault` của operator trong container (stack lab đặt `VAULT_TOKEN=root`), không dùng API key admin của app.
 
 **Kỳ vọng:**
 
@@ -592,31 +594,41 @@ Remove-Item -Recurse -Force $tmp
 **Các bước:**
 
 ```powershell
-# (a) Tải bình thường 10 phút: chạy k6 10 VUs, sau đó phân tích audit
+# (0) Làm sạch audit để phép đo chỉ chứa lưu lượng của lần chạy này
+docker compose exec -T vault sh -c "export VAULT_ADDR=http://127.0.0.1:8200 VAULT_TOKEN=root; vault audit disable file/; rm -f /tmp/vault-audit.log; vault audit enable file file_path=/tmp/vault-audit.log"
+
+# (a) Tải bình thường 10 phút qua API (identity audit = approle)
+docker run --rm -v "${PWD}:/work" -w /work grafana/k6:0.54.0 run `
+  -e BASE_URL=http://host.docker.internal:8000 `
+  -e API_KEY=local-demo-api-key-change-me `
+  -e VUS=5 -e SLEEP=2 -e DURATION=10m bench/k6/mixed.js
+
 docker compose cp vault:/tmp/vault-audit.log bench/results/audit_normal.log
 docker run --rm -v "${PWD}:/work" -w /work python:3.12-slim `
   python student2_project_windows/scripts/alert_decrypt_rate.py `
   --log bench/results/audit_normal.log --threshold 200 --window 60
 
-# (b) Gieo 200 lần giải mã từ token demo (không dùng token của app để tách danh tính)
-docker compose exec -T api python scripts/generate_decrypt_load.py --count 200
+# (b) Gieo 200 lần giải mã bằng token demo/root (identity audit = token, tách khỏi app)
+docker compose run --rm --no-deps vault-init python scripts/generate_decrypt_load.py --count 200
 docker compose cp vault:/tmp/vault-audit.log bench/results/audit_attack.log
 docker run --rm -v "${PWD}:/work" -w /work python:3.12-slim `
   python student2_project_windows/scripts/alert_decrypt_rate.py `
   --log bench/results/audit_attack.log --threshold 200 --window 60
 ```
 
+`VUS=5, SLEEP=2` giãn nhịp để tải nền chỉ có ~90 decrypt/phút, thấp hơn ngưỡng 200. Không chạy burst qua API container: API cố ý không giữ token root, nên script dùng `vault-init` với `VAULT_DEMO_TOKEN=root`. Trong audit, app có `auth.display_name = approle`, burst có `display_name = token`; vì vậy phép phân tích theo danh tính không trộn hai nguồn.
+
 **Kỳ vọng:**
 
-- (a) không có `ALERT` cho danh tính app trong 10 phút; ghi lại số decrypt/phút thực tế và số cảnh báo giả (mục tiêu 0).
-- (b) có `ALERT` cho danh tính tấn công; ghi thời điểm bắt đầu, thời điểm đạt ngưỡng trong log, và độ trễ phát hiện.
+- (a) không có `ALERT` cho danh tính `approle` trong 10 phút; ghi lại số decrypt/phút thực tế và số cảnh báo giả (mục tiêu 0).
+- (b) có `ALERT` cho danh tính `token`; ghi thời điểm bắt đầu, thời điểm đạt ngưỡng trong log, và độ trễ phát hiện.
 - Nếu tải thường đã vượt 200/phút, threshold phải được hiệu chỉnh theo baseline và ghi rõ lý do; không che giấu false positive.
 
 ## 6. Nhật ký defect và việc cần sửa
 
 | Mã | Mức | Mô tả | Bằng chứng | Người sửa | Trạng thái |
 |---|---|---|---|---|---|
-| D-01 | Cao | Policy app cấp `update` cho `transit/keys/app-data-key/rotate` | `setup_vault.py` | SV2 | Mở |
+| D-01 | Cao | Policy app cấp `update` cho `transit/keys/app-data-key/rotate` và `read` cho metadata khóa | `setup_vault.py` | SV2 | Mở |
 | D-02 | Cao | AppRole `secret_id_ttl=0s`, `secret_id_num_uses=0` | `setup_vault.py` | SV2 | Mở |
 | D-03 | Cao | Chưa có rewrap và `min_decryption_version` sau khi xoay KEK | `rotate_transit_key.py` | SV2 | Mở |
 | D-04 | Trung bình | Stack dự phòng dùng Vault dev mode, HTTP, root token; không dùng cho production | `docker-compose.yml` | SV1/SV3 | Chấp nhận trong lab, ghi rõ |

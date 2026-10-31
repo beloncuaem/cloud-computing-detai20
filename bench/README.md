@@ -9,6 +9,7 @@ Thư mục này chứa kịch bản đo và kết quả thô cho Chương 4. K�
 - Ghi: `POST /records` với `record_type = bench_phone`, giá trị tổng hợp `090xxxxxxx`.
 - Đọc: `GET /records/{id}` của một bản ghi được tạo trong `setup()`.
 - Header `X-API-Key` lấy từ biến môi trường `API_KEY`.
+- `SLEEP` (giây, mặc định `0`) giãn nhịp sau mỗi vòng lặp. Benchmark hiệu năng để mặc định; T16 dùng `SLEEP>0` để tải nền không vượt ngưỡng cảnh báo.
 
 Chạy qua Docker để không cần cài k6 trên máy:
 
@@ -30,6 +31,8 @@ docker run --rm -v "${PWD}:/work" -w /work grafana/k6:0.54.0 run `
 ```
 
 Nếu API chạy native trên Windows (không qua Docker), dùng `BASE_URL=http://127.0.0.1:8000`; nếu k6 chạy trong container thì `host.docker.internal` trỏ về máy host trên Docker Desktop.
+
+Với T16 (kiểm tra false positive của cảnh báo giải mã), chạy tải nền chậm trong 10 phút: `VUS=5`, `SLEEP=2`, `DURATION=10m`. Lượng decrypt ~90/phút, thấp hơn ngưỡng 200/phút. Nếu chạy k6 trong cùng network Compose thì dùng `BASE_URL=http://api:8000` thay cho `host.docker.internal`.
 
 ## 2. Ma trận cấu hình
 
