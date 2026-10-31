@@ -460,7 +460,7 @@ git reset --hard origin/main   # chỉ dùng sau khi chắc chắn không có th
 
 **Kỳ vọng:** GitHub trả `GH013` / `Changes must be made through a pull request`; force push cũng bị chặn; PR chưa đủ approval không merge được.
 
-**Bổ sung sau khi CI chạy lần đầu:** vào Settings → Rules → `main-1`, thêm required status check `gitleaks` (và có thể `unit-tests`), chụp lại màn hình. Hiện ruleset bật "Require status checks" nhưng danh sách trống nên chưa chặn merge.
+**Đã cập nhật ruleset (31/10/2026):** `gitleaks` và `unit-tests` đã được thêm làm required status checks cho `main-1`. PR #5 đã chạy xanh cả hai job. Cần chụp lại màn hình Settings → Rules → `main-1` và ảnh PR có 2 check xanh làm bằng chứng T12.
 
 ### T13 — TLS và bảo vệ dữ liệu at rest
 
