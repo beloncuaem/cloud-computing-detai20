@@ -130,9 +130,10 @@ Ghi lại thời điểm và theo dõi k6 trong lúc xoay. Không dùng `rotate_
 docker compose exec -T vault sh -c "export VAULT_ADDR=http://127.0.0.1:8200 VAULT_TOKEN=root; vault audit disable file/; rm -f /tmp/vault-audit.log; vault audit enable file file_path=/tmp/vault-audit.log"
 
 # 1) Tải nền 10 phút qua API (identity audit = approle), phải KHÔNG cảnh báo
-docker run --rm -i --network detai20_default -e BASE_URL=http://api:8000 `
-  -e VUS=5 -e SLEEP=2 -e DURATION=10m `
-  -v "${PWD}/bench/k6:/scripts" grafana/k6:0.54.0 run /scripts/mixed.js
+docker run --rm -v "${PWD}:/work" -w /work grafana/k6:0.54.0 run `
+  -e BASE_URL=http://host.docker.internal:8000 `
+  -e API_KEY=local-demo-api-key-change-me `
+  -e VUS=5 -e SLEEP=2 -e DURATION=10m bench/k6/mixed.js
 
 # 2) Burst 200 lần giải mã bằng token root (identity tách khỏi AppRole của app)
 docker compose run --rm --no-deps vault-init python scripts/generate_decrypt_load.py --count 200
