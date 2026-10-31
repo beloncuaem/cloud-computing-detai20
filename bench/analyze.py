@@ -3,13 +3,15 @@
 
 Usage:
     python bench/analyze.py "bench/results/*.csv"
+    python bench/analyze.py "bench/results/*.csv.gz"
     docker run --rm -v "${PWD}:/work" -w /work python:3.12-slim \
-        python bench/analyze.py "bench/results/*.csv"
+        python bench/analyze.py "bench/results/*.csv.gz"
 
 The script uses only the Python standard library. It groups files by the
 configuration and VU count encoded in the file name, for example:
-    D-lab_50_run1.csv  -> config=D-lab, vus=50, run=run1
-    A_10_run3.csv      -> config=A, vus=10, run=run3
+    D-lab_50_run1.csv     -> config=D-lab, vus=50, run=run1
+    D-lab_50_run1.csv.gz  -> same (gzip-compressed raw CSV)
+    A_10_run3.csv         -> config=A, vus=10, run=run3
 """
 
 from __future__ import annotations
@@ -17,12 +19,15 @@ from __future__ import annotations
 import argparse
 import csv
 import glob
+import gzip
 import re
 import statistics
 from collections import defaultdict
 from pathlib import Path
 
-NAME_RE = re.compile(r"^(?P<config>[A-Za-z][A-Za-z0-9'-]*)_(?P<vus>\d+)_run(?P<run>\d+)\.csv$")
+NAME_RE = re.compile(
+    r"^(?P<config>[A-Za-z][A-Za-z0-9'-]*)_(?P<vus>\d+)_run(?P<run>\d+)\.csv(?:\.gz)?$"
+)
 
 
 def quantile(values: list[float], q: float) -> float:
@@ -39,7 +44,8 @@ def quantile(values: list[float], q: float) -> float:
 
 def read_durations(path: Path) -> list[float]:
     values: list[float] = []
-    with path.open(newline="", encoding="utf-8-sig") as handle:
+    opener = gzip.open if path.name.endswith(".gz") else open
+    with opener(path, "rt", newline="", encoding="utf-8-sig") as handle:
         for row in csv.DictReader(handle):
             if row.get("metric_name") != "http_req_duration":
                 continue
@@ -58,7 +64,7 @@ def main() -> None:
     parser.add_argument(
         "patterns",
         nargs="*",
-        default=["bench/results/*.csv"],
+        default=["bench/results/*.csv", "bench/results/*.csv.gz"],
         help="glob pattern(s) for k6 CSV exports",
     )
     args = parser.parse_args()
@@ -69,7 +75,9 @@ def main() -> None:
     files = list(dict.fromkeys(files))
 
     if not files:
-        raise SystemExit("No CSV files matched. Run k6 with --out csv=bench/results/....csv first.")
+        raise SystemExit(
+            "No CSV files matched. Run k6 with --out csv=bench/results/....csv first."
+        )
 
     per_file: list[tuple[Path, int, float, float, float, float]] = []
     grouped: dict[tuple[str, int], list[float]] = defaultdict(list)

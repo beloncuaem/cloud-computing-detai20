@@ -49,14 +49,16 @@ Không được ghi `D-lab` thành `D` trong báo cáo. Mỗi cấu hình chạy
 
 ## 3. Đặt tên và phân tích
 
-Mẫu tên: `<config>_<vus>_run<N>.csv`, ví dụ `D-lab_50_run3.csv`.
+Mẫu tên: `<config>_<vus>_run<N>.csv`, ví dụ `D-lab_50_run3.csv`. Khi lưu vào Git, nén lossless thành `.csv.gz` để giảm dung lượng (một lượt 3 phút có thể tạo 100–300 MB CSV thô; `.gz` thường còn 3–10%). `analyze.py` đọc trực tiếp file `.csv.gz`.
+
+Mỗi lượt nên kèm `--summary-export=bench/results/<config>_<vus>_run<N>_summary.json` (vài KB) để đối chiếu nhanh p50/p95/p99 và error rate kể cả khi CSV bị lược bớt.
 
 ```powershell
 docker run --rm -v "${PWD}:/work" -w /work python:3.12-slim `
-  python bench/analyze.py "bench/results/*.csv"
+  python bench/analyze.py "bench/results/*.csv.gz"
 ```
 
-Script in bảng p50/p95/p99, trung vị p95 theo cấu hình/VUs và overhead so với baseline A nếu có. Đây là số liệu để điền bảng Chương 4, không thay thế việc lưu CSV thô.
+Script in bảng p50/p95/p99, trung vị p95 theo cấu hình/VUs và overhead so với baseline A nếu có. Đây là số liệu để điền bảng Chương 4, không thay thế việc lưu dữ liệu thô.
 
 ## 4. Đo trong lúc rotation (E)
 
@@ -79,7 +81,7 @@ Ghi lại thời điểm bắt đầu/kết thúc rotation và cửa sổ lỗi 
 
 ## 5. Bằng chứng cần lưu
 
-- CSV thô trong `bench/results/` (đã được phép commit; chỉ commit CSV nhỏ, không commit log chứa secret).
+- CSV thô (nén `.csv.gz`) trong `bench/results/`; kèm `_summary.json` cho từng lượt. Chỉ commit dữ liệu tổng hợp, không commit log chứa secret.
 - Ảnh summary k6 của mỗi cấu hình.
 - Ảnh thời điểm rotation và kết quả API rotation.
 - Bảng tổng hợp do `analyze.py` in ra.

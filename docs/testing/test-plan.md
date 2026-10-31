@@ -522,7 +522,7 @@ Không được ghi kết quả D-lab thành D trong báo cáo. Nếu buộc ph�
 2. Khởi động lại stack trước mỗi cấu hình.
 3. Warm-up 60 giây, không ghi vào CSV.
 4. Chạy 5 lần cho mỗi mức 10/50/100 VUs, mỗi lần 3 phút (có thể 5 phút nếu máy đủ khỏe).
-5. Lưu CSV thô vào `bench/results/<config>_<vus>_run<N>.csv`.
+5. Lưu CSV thô vào `bench/results/<config>_<vus>_run<N>.csv`; kèm `_summary.json` từ `--summary-export`. Trước khi commit, nén lossless thành `.csv.gz` (CSV 3 phút có thể 100–300 MB; `analyze.py` đọc được `.csv.gz`).
 
 ```powershell
 New-Item -ItemType Directory -Force bench/results | Out-Null
@@ -545,7 +545,7 @@ docker run --rm -v "${PWD}:/work" -w /work grafana/k6:0.54.0 run `
 
 ```powershell
 docker run --rm -v "${PWD}:/work" -w /work python:3.12-slim `
-  python bench/analyze.py "bench/results/*.csv"
+  python bench/analyze.py "bench/results/*.csv.gz"
 ```
 
 **Kỳ vọng:**

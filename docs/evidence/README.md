@@ -11,12 +11,16 @@
 | `T16_alert_2026-10-31.md` | T16: tải nền 10 phút không báo nhầm; burst 200 decrypt bị phát hiện trong 0,4 giây | 31/10/2026 | Bản ghi terminal; cần ảnh chụp |
 | `T03_T04_tamper_2026-10-31.md` | T03/T04: sửa ciphertext và tráo payload đều trả 503, audit ghi `decrypt_failed` | 31/10/2026 | Bản ghi terminal; cần ảnh chụp |
 | `T09_T10_db_credentials_2026-10-31.md` | T09/T10: xoay credential DB dưới tải 0 lỗi; gia hạn/thu hồi lease hoạt động | 31/10/2026 | Bản ghi terminal; cần ảnh chụp |
+| `T01_T05_T07_2026-10-31.md` | T01: round-trip đúng, DEK `vault:v1`, nonce 12 byte; T05: 401/401/403; T07: audit có decrypt + database creds, 0 plaintext | 31/10/2026 | Bản ghi terminal; cần ảnh chụp |
+| `T11_T12_2026-10-31.md` | T11: 14 commit 0 leak, secret giả bị bắt; T12: ruleset `main-1` bắt buộc PR + 1 approval + `gitleaks`/`unit-tests` | 31/10/2026 | Bản ghi terminal; cần ảnh chụp |
+| `T13_partial_2026-10-31.md` | T13: image không chứa secret; PostgreSQL `ssl=off`, chưa có TLS → **chưa đạt**, chờ SV1 | 31/10/2026 | Bản ghi một phần; cần ảnh chụp |
+| `T06_T08_2026-10-31.md` | T06: checker FAIL do D-01 (policy còn rotate/read metadata); T08: chưa có rewrap/min version (D-03) → **chưa đạt** | 31/10/2026 | Bản ghi defect; cần ảnh chụp |
 
 ## Ghi chú
 
 - Hai ảnh cũ `branch_protection.png` và `git_log.png` đã xóa ngày 31/10/2026 vì không chứng minh được trạng thái cuối (một ảnh chỉ là hộp thoại trước khi tạo ruleset, một ảnh mới có 1 tác giả và tag `v0.1`).
 - `ruleset_rules.png` chưa mở rộng mục "Require a pull request before merging" nên chưa thấy số approval yêu cầu (1). Khi tiện, chụp thêm ảnh đã mở rộng mục này.
-- Ruleset đang bật "Require status checks" nhưng chưa gán check nào. Sau khi workflow Gitleaks chạy lần đầu, cập nhật ruleset rồi chụp lại.
+- Ruleset `main-1` đã gán hai required checks `gitleaks` và `unit-tests` ngày 31/10/2026 (xác nhận qua API, xem `T11_T12_2026-10-31.md`). Cần chụp lại màn hình Settings → Rules → `main-1` với mục status checks mở rộng.
 - Ảnh lỗi PowerShell (`Set-Location ... 'liệu'`) là lỗi thao tác cục bộ, không phải bằng chứng kỹ thuật, không đưa vào báo cáo.
 
 ## Cần chụp bổ sung
