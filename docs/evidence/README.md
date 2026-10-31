@@ -8,6 +8,7 @@
 | `ruleset_rules.png` | Chi tiết 4 rule: chặn xóa nhánh, yêu cầu PR, yêu cầu status check, chặn force push | 31/10/2026 | Hợp lệ |
 | `push_blocked_main.png` | Push trực tiếp lên `main` bị từ chối: `GH013 ... Changes must be made through a pull request` | 31/10/2026 | Hợp lệ |
 | `pr_review_merged.png` | PR #3 được `beloncuaem` approve và merge vào `main` (27 tệp, +1.496 dòng) | 31/10/2026 | Hợp lệ |
+| `T16_alert_2026-10-31.md` | T16: tải nền 10 phút không báo nhầm; burst 200 decrypt bị phát hiện trong 0,4 giây | 31/10/2026 | Bản ghi terminal; cần ảnh chụp |
 
 ## Ghi chú
 
@@ -25,3 +26,4 @@
 - [ ] Log rotation KEK/DEK và thu hồi lease
 - [ ] Kết quả k6: p50/p95/p99, RPS, error rate
 - [ ] Audit log của Vault ghi nhận truy cập Transit/Database
+- [ ] Ảnh chụp terminal T16 (dùng kèm `T16_alert_2026-10-31.md`)
