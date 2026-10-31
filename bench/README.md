@@ -38,14 +38,41 @@ Với T16 (kiểm tra false positive của cảnh báo giải mã), chạy tải
 
 | Mã | Cấu hình | Ghi chú |
 |---|---|---|
-| A | Plaintext, HTTP | Baseline. App hiện chưa có chế độ này; cần build benchmark riêng, không merge vào `main` |
+| A | Plaintext, HTTP | Baseline `bench/baseline/server.py`, cổng 8001; chỉ dùng benchmark, không merge vào app |
 | B | TLS | Chờ SV1 cấu hình TLS |
 | C | TLS + mã hóa volume | Chờ SV1 + BitLocker/volume encryption |
 | D | TLS + envelope encryption | Đo được phần envelope; nếu chưa có TLS thì ghi là `D-lab` |
-| E | D + rotation | Xoay DB credential/KEK trong lúc chạy k6 |
+| E | D + rotation | Kết quả hiện tại là `E-lab` (envelope qua HTTP + xoay DB credential/KEK) |
 | D' | D sau tối ưu | Sau khi SV2 cache DEK/giảm gọi Vault |
 
 Không được ghi `D-lab` thành `D` trong báo cáo. Mỗi cấu hình chạy tối thiểu 5 lần; mỗi lần 3–5 phút; lặp lại ở 10, 50, 100 VUs. Khởi động lại stack trước mỗi cấu hình.
+
+### 2.1. Baseline plaintext (cấu hình A) — chỉ dùng cho benchmark
+
+`bench/baseline/server.py` là một API tối giản, **cố ý lưu plaintext**, dùng để đo H1. Nó không thuộc ứng dụng và không được deploy. API này mô phỏng cùng khối lượng DB với target: mỗi POST ghi 1 bản ghi + 1 audit trong một transaction; mỗi GET đọc bản ghi + ghi 1 audit.
+
+```powershell
+# Chạy trên network của compose, dùng image API (đã có FastAPI/psycopg)
+docker run -d --name detai20-baseline --network detai20_default `
+  -p 8001:8001 -v "${PWD}/bench/baseline:/baseline:ro" -w /baseline `
+  -e BASELINE_DB_DSN="postgresql://postgres:local_demo_postgres_password@postgres:5432/encryption_db" `
+  -e API_KEY="local-demo-api-key-change-me" `
+  detai20-api:local uvicorn server:app --host 0.0.0.0 --port 8001
+
+# Kiểm tra
+curl.exe -s http://127.0.0.1:8001/ready
+
+# Đo: dùng cùng mixed.js, chỉ đổi BASE_URL và tên file A_...
+docker run --rm -v "${PWD}:/work" -w /work grafana/k6:0.54.0 run `
+  -e BASE_URL=http://host.docker.internal:8001 `
+  -e API_KEY=local-demo-api-key-change-me `
+  -e VUS=50 -e DURATION=3m `
+  --out csv=bench/results/A_50_run1.csv bench/k6/mixed.js
+
+docker rm -f detai20-baseline
+```
+
+Bảng `bench_plaintext_records`/`bench_plaintext_audit` được tạo tự động trong `encryption_db`; chúng chỉ phục vụ đo đạc, không phải dữ liệu của ứng dụng. Ghi rõ trong báo cáo đây là baseline dựng riêng, không merge vào `main`.
 
 ## 3. Đặt tên và phân tích
 
@@ -68,7 +95,7 @@ docker run --rm -v "${PWD}:/work" -w /work grafana/k6:0.54.0 run `
   -e BASE_URL=http://host.docker.internal:8000 `
   -e API_KEY=local-demo-api-key-change-me `
   -e VUS=50 -e DURATION=3m `
-  --out csv=bench/results/E_50_run1.csv bench/k6/mixed.js
+  --out csv=bench/results/E-lab_50_run1.csv bench/k6/mixed.js
 
 # Terminal 2: sau khi k6 đã chạy khoảng 60 giây
 Invoke-RestMethod -Method Post -Uri "http://127.0.0.1:8000/admin/rotation/database" `
@@ -77,11 +104,11 @@ Invoke-RestMethod -Method Post -Uri "http://127.0.0.1:8000/admin/rotation/transi
   -Headers @{ "X-Admin-Key" = "local-demo-admin-key-change-me" }
 ```
 
-Ghi lại thời điểm bắt đầu/kết thúc rotation và cửa sổ lỗi (nếu có). H2 yêu cầu tỷ lệ lỗi dưới 0,1% trong cửa sổ này.
+Ghi lại thời điểm bắt đầu/kết thúc rotation và cửa sổ lỗi (nếu có). H2 yêu cầu tỷ lệ lỗi dưới 0,1% trong cửa sổ này. API phải chạy với `USE_VAULT_DB_CREDS=true` để phép xoay credential DB có ý nghĩa.
 
 ## 5. Bằng chứng cần lưu
 
-- CSV thô (nén `.csv.gz`) trong `bench/results/`; kèm `_summary.json` cho từng lượt. Chỉ commit dữ liệu tổng hợp, không commit log chứa secret.
+- CSV thô nén `.csv.gz` trong `bench/results/`; kèm `_summary.json` cho từng lượt. Commit CSV + summary (dữ liệu tổng hợp giả), không commit file `.log` và không commit secret.
 - Ảnh summary k6 của mỗi cấu hình.
 - Ảnh thời điểm rotation và kết quả API rotation.
 - Bảng tổng hợp do `analyze.py` in ra.

@@ -73,24 +73,24 @@ Các lệnh `docker compose ...` chạy từ thư mục gốc repository. Nếu 
 
 ## 4. Ma trận kiểm thử
 
-| ID | Hạng mục | Mục tiêu | Kỳ vọng | Trạng thái ban đầu |
+| ID | Hạng mục | Mục tiêu | Kỳ vọng | Trạng thái (31/10/2026) |
 |---|---|---|---|---|
-| T01 | Envelope encryption | Round-trip create/read | Giá trị đọc lại khớp; DB chỉ có ciphertext, nonce, encrypted DEK | Chưa chạy |
-| T02 | Plaintext leakage | Không có plaintext trong DB/dump | 0 kết quả khi tìm chuỗi test | Chưa chạy |
-| T03 | Tamper detection | Sửa ciphertext bị phát hiện | HTTP 503, audit ghi failure | Chưa chạy |
-| T04 | AAD binding | Hoán đổi ciphertext giữa 2 bản ghi bị phát hiện | HTTP 503 | Chưa chạy |
-| T05 | API authentication | Thiếu/sai API key bị chặn | 401; key đúng 201 | Chưa chạy |
-| T06 | AppRole least privilege | App không rotate/export KEK | Checker PASS; rotate/export bị 403 | Có defect D-01 |
-| T07 | Audit | Ghi nhận Transit/Database | Audit log có `transit/decrypt`, `database/creds`; không có plaintext | Chưa chạy |
-| T08 | KEK rotation + rewrap | Xoay KEK, rewrap, chặn version cũ | Rewrap sang version mới; `min_decryption_version` chặn v1 | Có defect D-03 |
-| T09 | DB credential rotation | Xoay mật khẩu DB dưới tải | Lỗi < 0,1%; pool mới hoạt động | Chưa chạy |
-| T10 | Lease lifecycle | Gia hạn/thu hồi lease | Credential bị thu hồi không đăng nhập được | Có defect D-02 |
-| T11 | Secret scanning | Gitleaks chặn secret | 0 finding trên repo; secret giả bị phát hiện | Chưa chạy |
-| T12 | Branch protection | Chặn push trực tiếp/force push; bắt buộc PR + approval | GitHub từ chối; PR chỉ merge sau approval | Đã có bằng chứng một phần |
-| T13 | TLS / at rest | Bảo vệ trên đường truyền và ổ đĩa | TLS bật; BitLocker/volume encryption bật | Chưa đạt — thiếu TLS |
-| T14 | Benchmark | Đo p50/p95/p99, RPS, lỗi | Đủ 10/50/100 VUs, 5 lần; H1, H2 | Chưa chạy |
-| T15 | Cost / cleanup / reproducibility | Dựng lại và dọn sạch | Lệnh dựng lại chạy được; không còn tài nguyên | Chưa chạy |
-| T16 | Anomaly alert | Cảnh báo giải mã bất thường | 200 decrypt/phút sinh cảnh báo; tải thường không báo | Chưa chạy |
+| T01 | Envelope encryption | Round-trip create/read | Giá trị đọc lại khớp; DB chỉ có ciphertext, nonce, encrypted DEK | ĐẠT |
+| T02 | Plaintext leakage | Không có plaintext trong DB/dump | 0 kết quả khi tìm chuỗi test | ĐẠT (4/4 vị trí = 0) |
+| T03 | Tamper detection | Sửa ciphertext bị phát hiện | HTTP 503, audit ghi failure | ĐẠT |
+| T04 | AAD binding | Hoán đổi ciphertext giữa 2 bản ghi bị phát hiện | HTTP 503 | ĐẠT |
+| T05 | API authentication | Thiếu/sai API key bị chặn | 401; key đúng 201 | ĐẠT (401/401/403) |
+| T06 | AppRole least privilege | App không rotate/export KEK | Checker PASS; rotate/export bị 403 | CHƯA ĐẠT — D-01 |
+| T07 | Audit | Ghi nhận Transit/Database | Audit log có `transit/decrypt`, `database/creds`; không có plaintext | ĐẠT |
+| T08 | KEK rotation + rewrap | Xoay KEK, rewrap, chặn version cũ | Rewrap sang version mới; `min_decryption_version` chặn v1 | CHƯA ĐẠT — D-03 |
+| T09 | DB credential rotation | Xoay mật khẩu DB dưới tải | Lỗi < 0,1%; pool mới hoạt động | ĐẠT (20 VUs/1 phút + E-lab 50 VUs/3 phút) |
+| T10 | Lease lifecycle | Gia hạn/thu hồi lease | Credential bị thu hồi không đăng nhập được | ĐẠT; D-02 còn mở |
+| T11 | Secret scanning | Gitleaks chặn secret | 0 finding trên repo; secret giả bị phát hiện | ĐẠT |
+| T12 | Branch protection | Chặn push trực tiếp/force push; bắt buộc PR + approval | GitHub từ chối; PR chỉ merge sau approval | ĐẠT một phần (API + ảnh) |
+| T13 | TLS / at rest | Bảo vệ trên đường truyền và ổ đĩa | TLS bật; BitLocker/volume encryption bật | CHƯA ĐẠT — thiếu TLS |
+| T14 | Benchmark | Đo p50/p95/p99, RPS, lỗi | Đủ 10/50/100 VUs, 5 lần; H1, H2 | ĐẠT MỘT PHẦN — A/D-lab/E-lab; H1 bác bỏ; thiếu B/C/D |
+| T15 | Cost / cleanup / reproducibility | Dựng lại và dọn sạch | Lệnh dựng lại chạy được; không còn tài nguyên | ĐẠT (nhánh `infra/fallback-compose`, 24 s, smoke 9/9) |
+| T16 | Anomaly alert | Cảnh báo giải mã bất thường | 200 decrypt/phút sinh cảnh báo; tải thường không báo | ĐẠT |
 
 ## 5. Chi tiết ca kiểm thử
 
@@ -507,7 +507,7 @@ docker run --rm detai20-api:local sh -c `
 
 | Mã | Cấu hình | Trạng thái với app hiện tại |
 |---|---|---|
-| A | Không mã hóa, HTTP (baseline) | Chưa có chế độ baseline; cần build benchmark riêng, không đưa vào `main` |
+| A | Không mã hóa, HTTP (baseline) | Đã có `bench/baseline/server.py` (chỉ dùng benchmark, không merge vào app); chạy cổng 8001 |
 | B | TLS | Chờ SV1 |
 | C | TLS + mã hóa volume | Chờ SV1 + BitLocker |
 | D | TLS + envelope encryption | Đo được phần envelope; TLS chờ SV1 (tạm gọi D-lab nếu chạy HTTP) |
@@ -545,7 +545,7 @@ docker run --rm -v "${PWD}:/work" -w /work grafana/k6:0.54.0 run `
 
 ```powershell
 docker run --rm -v "${PWD}:/work" -w /work python:3.12-slim `
-  python bench/analyze.py "bench/results/*.csv.gz"
+  python bench/analyze.py "bench/results/*.csv.gz" "bench/results/*_summary.json"
 ```
 
 **Kỳ vọng:**
@@ -553,6 +553,23 @@ docker run --rm -v "${PWD}:/work" -w /work python:3.12-slim `
 - H1: `(p95_D − p95_A) / p95_A ≤ 30%`. Nếu chưa có A, ghi rõ H1 chưa kết luận.
 - H2: trong cửa sổ rotation, `http_req_failed < 0.001` và không có 5xx.
 - Báo cáo bảng p50/p95/p99, RPS, error rate, CPU; nêu sai số và giới hạn máy cá nhân.
+
+**Kết quả 31/10/2026 (xem `docs/evidence/T14_benchmark_2026-10-31.md`):**
+
+| Cấu hình | VUs | Số lần | RPS (trung vị) | p95 (ms) | Error |
+|---|---:|---:|---:|---:|---:|
+| A baseline | 10 | 3 | 238,90 | 55,46 | 0,00% |
+| D-lab | 10 | 5 | 106,87 | 123,24 | 0,00% |
+| A baseline | 50 | 3 | 169,14 | 372,90 | 0,00% |
+| D-lab | 50 | 5 | 110,55 | 838,68 | 0,00% |
+| A baseline | 100 | 3 | 163,61 | 704,61 | 0,00% |
+| D-lab | 100 | 5 | 2,73 | 59.995,57 | 50,10% (sụp pool) |
+| E-lab (xoay DB+KEK) | 50 | 3 | 77,34 | 1.183,01 | 0,00% |
+
+- H1 **bị bác bỏ**: overhead p95 +122,21% (10 VUs), +124,91% (50 VUs).
+- H2 **đạt**: 3/3 lần E-lab 0 lỗi; 6 thao tác xoay HTTP 200; 0 phản hồi 5xx.
+- Sai lệch so với quy trình: A và E-lab chạy 3 lần thay vì 5; không khởi động lại stack giữa D-lab và A (Vault dev mode mất KEK khi restart). Đã ghi trong bằng chứng.
+- Thiếu B/C và D đầy đủ (TLS, volume encryption) nên T14 chỉ đạt một phần.
 
 **Bằng chứng:** CSV thô, bảng Markdown do `analyze.py` xuất, ảnh summary k6, ảnh thời điểm rotation, mô tả máy.
 
@@ -570,7 +587,8 @@ docker system df
 
 # Tái lập từ bản sạch (thư mục tạm)
 $tmp = Join-Path $env:TEMP "detai20-repro-$(Get-Random)"
-git clone https://github.com/beloncuaem/cloud-computing-detai20 $tmp
+# Trước khi PR #6 merge, compose chỉ có trên nhánh dự phòng:
+git clone --branch infra/fallback-compose --single-branch https://github.com/beloncuaem/cloud-computing-detai20 $tmp
 Push-Location $tmp
 docker compose up -d --build
 powershell -ExecutionPolicy Bypass -File scripts/smoke-test.ps1
@@ -580,6 +598,8 @@ Remove-Item -Recurse -Force $tmp
 ```
 
 **Kỳ vọng:** lệnh dựng lại chạy không lỗi; smoke test PASS; sau `down -v` không còn container/volume của dự án; thời gian dựng lại được ghi lại.
+
+**Kết quả 31/10/2026:** clone nhánh `infra/fallback-compose` tại `03adad2`, build và `/ready` trong **24 giây** (có cache image), smoke test **9/9 PASS**, sau `down -v` không còn container/volume `detai20`. Chi phí cloud 0; image 2,233 GB và build cache 992,3 MB còn trong Docker. Chi tiết: `docs/evidence/T15_reproducibility_2026-10-31.md`. Chưa chứng minh `main` tái lập được vì PR #6 chưa merge.
 
 **Chi phí:** lab chạy cục bộ nên chi phí cloud là 0. Nếu triển khai cloud, lập bảng theo bảng giá hiện hành (VM, ổ đĩa, băng thông, Vault/KMS); không dùng số liệu ước lượng không nguồn. Ghi rõ tài nguyên đã dọn.
 
@@ -643,7 +663,8 @@ docker run --rm -v "${PWD}:/work" -w /work python:3.12-slim `
 | D-04 | Trung bình | Stack dự phòng dùng Vault dev mode, HTTP, root token; không dùng cho production | `docker-compose.yml` | SV1/SV3 | Chấp nhận trong lab, ghi rõ |
 | D-05 | Trung bình | `vault_admin` là PostgreSQL SUPERUSER | `sql/00-create-roles.sql` | SV1 | Chấp nhận trong lab, ghi rõ |
 | D-06 | Thấp | `.vscode/settings.json` còn tracked; `.gitignore` từng bỏ qua CSV benchmark | repo | SV2/SV3 | CSV đã sửa trong PR này; `.vscode` chờ dọn |
-| D-07 | Trung bình | Chưa có cấu hình baseline plaintext (A) cho H1 | `bench/` | SV2/SV3 | Mở |
+| D-07 | Trung bình | Chưa có cấu hình baseline plaintext (A) cho H1 | `bench/baseline/server.py` | SV2/SV3 | Đã có baseline, giữ tách khỏi app |
+| D-08 | Trung bình | Pool 5+10, một Uvicorn worker; connection bị giữ trong lúc gọi Vault | `student2_project_windows/app/database.py` | SV2/SV3 | Mở; đã ghi trong mục 4.4 |
 
 ## 7. Điều kiện nghiệm thu
 
@@ -652,7 +673,7 @@ Chỉ tag `v1.0.0` khi:
 - T01–T05, T07, T09–T12, T15, T16 đạt.
 - T06 và T08 đạt sau khi D-01/D-03 được sửa; nếu chưa, ghi rõ là "chưa đạt" và không tuyên bố đã kiểm chứng least privilege/rewrap.
 - T13 đạt sau khi SV1 bàn giao TLS; nếu không, ghi rõ giới hạn.
-- T14 có đủ dữ liệu cho ít nhất D/E và nêu rõ A/B/C; H1 chỉ kết luận khi có A; H2 kết luận từ E.
+- T14 có đủ dữ liệu cho ít nhất D/E và nêu rõ A/B/C; H1 chỉ kết luận khi có A; H2 kết luận từ E-lab (chưa TLS) và ghi rõ khác biệt với E.
 - Không còn secret thật trong repo/history; Gitleaks xanh trên PR cuối.
 - Ruleset yêu cầu `gitleaks` và 1 approval; push trực tiếp bị chặn.
 - Báo cáo có bảng kết quả, ảnh bằng chứng, phần rủi ro còn lại và kế hoạch mất khóa.
