@@ -1,0 +1,1 @@
+{"status":"rotated","message":"New requests use the new pool; the previous Vault lease is allowed to expire for in-flight work.","new_lease_duration_seconds":3600,"previous_lease_duration_seconds":3600}

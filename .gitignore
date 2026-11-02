@@ -18,5 +18,4 @@ venv/
 .DS_Store
 Thumbs.db
 
-# Benchmark raw outputs
-bench/results/*.csv
+# Benchmark raw CSV is committed as evidence (keep files small; no secrets/logs).

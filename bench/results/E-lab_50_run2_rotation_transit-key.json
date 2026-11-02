@@ -1,0 +1,1 @@
+{"status":"rotated","key_name":"app-data-key","note":"This rotates the KEK version. It does not create new DEKs or re-encrypt existing payloads."}
