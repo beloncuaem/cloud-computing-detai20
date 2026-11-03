@@ -2,6 +2,8 @@
 
 Bộ này **không dùng Docker**. PostgreSQL chạy trực tiếp trên Windows; FastAPI chạy bằng Python trong VS Code; Vault chạy riêng bằng `vault.exe` trên máy local.
 
+> Có một stack Docker dự phòng ở thư mục gốc repository (`docker-compose.yml`) để cả nhóm kiểm thử khi hạ tầng Vault + TLS chưa sẵn sàng. Hướng dẫn ở `docs/infra/local-stack.md`; stack này không thay thế hướng dẫn Windows native bên dưới và không dùng cho production.
+
 ## 1. Cấu trúc thư mục
 
 ```text
