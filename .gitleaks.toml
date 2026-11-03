@@ -1,5 +1,22 @@
 title = "Gitleaks config"
 
+# A custom config replaces the bundled rules unless useDefault is enabled.
+# Keep the default rule set and add only the allowlist below.
+[extend]
+useDefault = true
+
+# Default Gitleaks rules stay enabled. This file only allowlists the public
+# local-lab placeholder values that are intentionally committed in
+# .env.example, app/config.py, sql/00-create-roles.sql, and docker-compose.yml.
+#
+# Do not add real credentials here. If a real secret is ever detected, revoke
+# and rotate it first, then remove it from history with a reviewed procedure.
 [allowlist]
-description = "Allowlist for placeholders"
-regexes = ['EXAMPLE', 'your_password_here']
+description = "Local-lab demo placeholders only"
+regexes = [
+  '''local_app_password''',
+  '''local_vault_admin_password''',
+  '''local_demo_postgres_password''',
+  '''local-demo-api-key-change-me''',
+  '''local-demo-admin-key-change-me''',
+]
