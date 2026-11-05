@@ -100,11 +100,10 @@ docker run --rm -v "${PWD}:/work" -w /work grafana/k6:0.54.0 run `
 # Terminal 2: sau khi k6 đã chạy khoảng 60 giây
 Invoke-RestMethod -Method Post -Uri "http://127.0.0.1:8000/admin/rotation/database" `
   -Headers @{ "X-Admin-Key" = "local-demo-admin-key-change-me" }
-Invoke-RestMethod -Method Post -Uri "http://127.0.0.1:8000/admin/rotation/transit-key" `
-  -Headers @{ "X-Admin-Key" = "local-demo-admin-key-change-me" }
+docker compose run --rm --no-deps --entrypoint python vault-init scripts/rotate_transit_key.py
 ```
 
-Ghi lại thời điểm bắt đầu/kết thúc rotation và cửa sổ lỗi (nếu có). H2 yêu cầu tỷ lệ lỗi dưới 0,1% trong cửa sổ này. API phải chạy với `USE_VAULT_DB_CREDS=true` để phép xoay credential DB có ý nghĩa.
+Ghi lại thời điểm bắt đầu/kết thúc rotation và cửa sổ lỗi (nếu có). H2 yêu cầu tỷ lệ lỗi dưới 0,1% trong cửa sổ này. API phải chạy với `USE_VAULT_DB_CREDS=true` để phép xoay credential DB có ý nghĩa. Xoay KEK trong cửa sổ đo bằng danh tính operator. Không gọi `POST /admin/rotation/transit-key` để xoay: endpoint đó dùng AppRole của ứng dụng và phải trả 403. Không đặt `min_decryption_version` trong lúc k6 còn chạy, vì bản ghi chưa rewrap sẽ bị từ chối giải mã.
 
 ## 5. Bằng chứng cần lưu
 

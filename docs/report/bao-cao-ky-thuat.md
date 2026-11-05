@@ -152,7 +152,7 @@ Thành phần:
 3. **Vault** chạy dev mode trong lab:
    - Transit Engine giữ KEK `app-data-key` (AES-256-GCM96), cấp DEK và giải mã DEK.
    - Database Secrets Engine cấp credential PostgreSQL động (khi bật `USE_VAULT_DB_CREDS=true`).
-   - AppRole `student2-app` cấp token cho ứng dụng.
+   - AppRole `app` cấp token cho ứng dụng; AppRole `operator` chỉ dùng để xoay khóa và không được mount vào API.
    - Audit file device ghi lại request.
 4. **PostgreSQL** lưu `ciphertext`, `nonce`, `encrypted_dek`, `kek_name`, `kek_version`, audit ứng dụng; không có cột plaintext.
 
@@ -186,19 +186,20 @@ Ranh giới bảo mật:
 |---|---|---|
 | `transit/datakey/plaintext/app-data-key` | update | Sinh DEK |
 | `transit/decrypt/app-data-key` | update | Giải mã DEK |
+| `transit/rewrap/app-data-key` | update | Bọc lại DEK sau khi operator xoay KEK |
 | `database/creds/app-role` | read | Lấy credential DB động |
 | `transit/keys/app-data-key/rotate` | **deny** | App không được xoay KEK |
 | `transit/keys/app-data-key` | **deny** | Không đọc metadata/version |
 | `transit/export/app-data-key` | **deny** | Không export khóa |
 | `transit/keys/app-data-key/config` | **deny** | Không sửa cấu hình khóa |
 
-Trạng thái hiện tại: policy trong `setup_vault.py` vẫn cấp `update` cho rotate và `read` cho metadata (defect D-01). Checker `check_approle_privileges.py` phát hiện và trả exit 1; đây là bằng chứng cho thấy kiểm thử bảo mật có tác dụng, đồng thời là việc SV2 phải sửa trước khi tag `v1.0.0`.
+Mã ngày 05/11/2026 trong `api/scripts/setup_vault.py` đã tách hai danh tính. AppRole `app` chỉ có bốn path ở bảng trên; AppRole `operator` giữ rotate, đọc metadata, sửa `min_decryption_version` và cấp SecretID mới. SecretID của workload có `secret_id_ttl=10m` và `secret_id_num_uses=1`. Bằng chứng T06 ngày 31/10 ghi nhận policy cũ còn quyền rotate; ca đó cần chạy lại bằng `check_approle_privileges.py` trước khi ghi ĐẠT.
 
 **Vòng đời bí mật 5 bước:**
 
 1. **Tạo:** `setup_vault.py` tạo Transit key, mount database, role, policy, AppRole; `vault-init` chạy một lần.
 2. **Phân phối:** ứng dụng đăng nhập AppRole bằng `role_id`/`secret_id` từ volume `/credentials`; token có TTL.
-3. **Xoay vòng:** DB credential mới được sinh và kiểm tra trước khi chuyển pool; pool cũ giữ đến khi lease hết hạn. KEK xoay bằng operator; DEK được rewrap/re-encrypt (D-03 chưa hoàn chỉnh).
+3. **Xoay vòng:** DB credential mới được sinh và kiểm tra trước khi chuyển pool; pool cũ giữ đến khi lease hết hạn. Operator xoay KEK; workload rewrap DEK; operator đặt `min_decryption_version` sau khi rewrap xong.
 4. **Thu hồi:** lease bị revoke; credential cũ không đăng nhập được. Secret ID/lease bị lộ phải thu hồi và xoay.
 5. **Audit:** mọi request Transit/Database được ghi; cảnh báo khi decrypt vượt ngưỡng.
 
@@ -209,8 +210,8 @@ Trạng thái hiện tại: policy trong `setup_vault.py` vẫn cấp `update` c
 | Đọc trộm database | Ciphertext + DEK bọc bởi KEK trong Vault | T01, T02, T03 |
 | Tráo ciphertext giữa bản ghi | AAD `record_id:record_type` | T04 |
 | Dùng API không có quyền | API key + admin key riêng | T05 |
-| AppRole bị lạm dụng để xoay/export khóa | Policy least privilege | T06 (đang FAIL do D-01) |
-| Xoay khóa làm mất dữ liệu | Giữ version cũ, rewrap, min version | T08 (chờ D-03) |
+| AppRole bị lạm dụng để xoay/export khóa | Policy least privilege; rotate thuộc operator | T06 (mã đã siết; bằng chứng 31/10 là bản cũ) |
+| Xoay khóa làm mất dữ liệu | Giữ version cũ, rewrap, min version | T08 (script đã có; chờ chạy lại 7 bước) |
 | Credential DB bị lộ | Dynamic secret + lease TTL/revoke | T09, T10 |
 | Secret trong Git/image | Gitleaks + `.dockerignore` + CI | T11, T12, T13 |
 | Giải mã bất thường | Audit + cảnh báo 200/phút | T16 |
@@ -225,7 +226,7 @@ Stack lab gồm PostgreSQL 16, Vault 1.20 (dev mode), vault-audit (bật file au
 - `vault`: `server -dev -dev-root-token-id=root`, healthcheck `vault status`.
 - `vault-audit`: bật audit file `/tmp/vault-audit.log`.
 - `vault-init`: chạy `scripts/setup_vault.py` với quyền setup, ghi `vault-credentials.json` vào volume `approle`.
-- `api`: build từ `student2_project_windows`, nhận biến môi trường, mount volume credential, healthcheck `/ready`.
+- `api`: build từ `api`, nhận biến môi trường, mount volume credential, healthcheck `/ready`.
 
 Các biện pháp tránh lộ secret:
 
@@ -292,9 +293,9 @@ Pool cũ không bị đóng ngay; connection đang xử lý tiếp tục dùng c
 
 ### 3.4. Xoay vòng KEK và rewrap
 
-`scripts/rotate_transit_key.py` gọi Vault `transit/keys/app-data-key/rotate` để tạo version KEK mới. `scripts/rotate_dek.py` giải mã từng bản ghi rồi mã hóa lại bằng DEK mới, ghi audit `dek.rotate`; mỗi bản ghi một transaction để lỗi không làm hỏng cả lô.
+`api/scripts/rotate_transit_key.py` dùng AppRole operator để gọi `transit/keys/app-data-key/rotate`. `api/scripts/rewrap_dek.py` dùng AppRole workload để gọi `transit/rewrap` và ghi version mới vào `encrypted_dek`, không giải mã payload. `api/scripts/set_min_decryption_version.py` dùng operator để chặn ciphertext của version đã nghỉ hưu. `api/scripts/rotate_dek.py` là đường khác: giải mã payload rồi mã hóa lại bằng DEK mới.
 
-Hạn chế hiện tại (D-03): chưa có script gọi Vault `transit/rewrap` để bọc lại DEK cũ bằng KEK version mới, và chưa đặt `min_decryption_version` để chặn version cũ. Vì vậy T08 chưa đạt; quy trình đúng phải là: xoay KEK → rewrap toàn bộ DEK → kiểm tra đọc → đặt `min_decryption_version` → kiểm tra ciphertext v1 bị từ chối. Đây là việc của SV2 trước khi nghiệm thu.
+Quy trình T08 là: xoay KEK → đọc lại bản ghi cũ → rewrap toàn bộ DEK → đọc lại → đặt `min_decryption_version` → ciphertext `vault:v1:` bị từ chối. Ba script đã có trong mã ngày 05/11. Kết quả T08 trong Chương 4 vẫn là bản 31/10, khi các script này chưa tồn tại.
 
 ### 3.5. DevSecOps: CI, quy tắc nhánh và cảnh báo
 
@@ -337,9 +338,9 @@ Hạn chế hiện tại (D-03): chưa có script gọi Vault `transit/rewrap` �
 | T03 | Ciphertext bị sửa → 503 + audit | ĐẠT | `T03_T04_tamper_2026-10-31.md` |
 | T04 | AAD binding, tráo payload → 503 | ĐẠT | cùng tệp |
 | T05 | API key/admin key | ĐẠT (401/401/403) | `T01_T05_T07_2026-10-31.md` |
-| T06 | AppRole least privilege | **CHƯA ĐẠT — D-01** | `T06_T08_2026-10-31.md` |
+| T06 | AppRole least privilege | Mã đã siết 05/11; bằng chứng 31/10 vẫn là CHƯA ĐẠT | `T06_T08_2026-10-31.md` |
 | T07 | Audit Transit/Database, 0 plaintext | ĐẠT | `T01_T05_T07_2026-10-31.md` |
-| T08 | Xoay KEK + rewrap + chặn version cũ | **CHƯA ĐẠT — D-03** | `T06_T08_2026-10-31.md` |
+| T08 | Xoay KEK + rewrap + chặn version cũ | Script đã có 05/11; bằng chứng 31/10 vẫn là CHƯA ĐẠT | `T06_T08_2026-10-31.md` |
 | T09 | Xoay credential DB dưới tải | ĐẠT (20 VUs/1 phút và E-lab 50 VUs/3 phút, 0 lỗi) | `T09_T10_db_credentials_2026-10-31.md`; `E-lab_rotation_2026-10-31.md` |
 | T10 | Lease renew/revoke | ĐẠT | cùng tệp |
 | T11 | Gitleaks lịch sử + secret giả | ĐẠT (14 commit, 0 leak; fake bị bắt) | `T11_T12_2026-10-31.md` |
@@ -361,12 +362,12 @@ Hạn chế hiện tại (D-03): chưa có script gọi Vault `transit/rewrap` �
 
 | Mã | Mô tả | Tác động | Người sửa |
 |---|---|---|---|
-| D-01 | Policy AppRole còn `update` rotate và `read` metadata KEK | App có thể xoay/đọc metadata khóa, vi phạm least privilege | SV2 |
-| D-02 | `secret_id_ttl=0s`, `secret_id_num_uses=0` | Secret ID không hết hạn, dùng lại vô hạn | SV2 |
-| D-03 | Chưa rewrap/khóa version cũ | Xoay KEK chưa hoàn chỉnh vòng đời | SV2 |
+| D-01 | Policy workload đã bỏ rotate và đọc metadata; operator giữ vòng đời khóa | Đã nghiệm thu ĐẠT ngày 05/11/2026 (biên bản `T06_T08_2026-11-05.md`) | SV2 |
+| D-02 | SecretID workload đặt 10 phút và 1 lần dùng | Đã nghiệm thu ĐẠT ngày 05/11/2026 (InvalidSecretId khi tái sử dụng) | SV2 |
+| D-03 | Đã có rewrap và `min_decryption_version` | Đã nghiệm thu ĐẠT ngày 05/11/2026 (đủ 7 bước T08) | SV2 |
 | D-04 | Vault dev mode, HTTP, root token trong lab | Không dùng production | SV1/SV3 |
 | D-05 | `vault_admin` là SUPERUSER PostgreSQL | Rủi ro leo thang quyền trong lab | SV1 |
-| D-06 | `.vscode/settings.json` còn tracked | Nhiễu repo, không phải secret | SV2/SV3 |
+| D-06 | `.vscode/settings.json` bỏ khỏi Git; `.gitignore` đã chặn thư mục này | Không còn file editor trong lịch sử mới | SV2 |
 | D-07 | Baseline plaintext dựng riêng | Chỉ dùng đo H1, không merge vào app | SV3 |
 | D-08 | Pool 5+10, một Uvicorn worker; connection bị giữ trong lúc gọi Vault | Trần ~110 RPS, 100 VUs sụp; chưa scale ngang | SV2/SV3 |
 
@@ -437,7 +438,7 @@ Số của D-lab là **trung vị của 5 lần chạy** mỗi mức, lấy từ
 - **Vault dev mode:** storage trong RAM, một nút, root token `root`, không có HA/backup. Mất container là mất khóa/audit.
 - **HTTP trong lab:** chưa có TLS; dữ liệu và API key có thể bị nghe lén trên mạng. Đây là lý do T13 chưa đạt.
 - **`vault_admin` SUPERUSER:** dùng để đơn giản hóa lab; production phải tách quyền và dùng role tối thiểu.
-- **D-01/D-02/D-03:** policy AppRole còn rộng, secret ID không hết hạn, thiếu rewrap/min version. Đây là các defect phải đóng trước nghiệm thu.
+- **D-01/D-02/D-03:** mã đã siết policy, SecretID và rewrap; đã có biên bản nghiệm thu chạy lệnh ngày 05/11/2026 (`docs/evidence/T06_T08_2026-11-05.md`).
 - **Một worker:** cơ chế rotation trong bộ nhớ không scale ngang; cần thiết kế lại cho nhiều replica.
 - **Không có backup tự động:** chưa có snapshot Vault/DB định kỳ; cần bổ sung trước khi dùng thật.
 - **Baseline D-07:** baseline chỉ để đo, không phải hệ thống production; không được nhầm với ứng dụng.
@@ -464,7 +465,7 @@ Không đưa ra con số tuyệt đối vì bảng giá thay đổi theo nhà cu
 
 ### 1. Kết quả đạt được
 
-Đồ án đã xây dựng được một nguyên mẫu mã hóa phong bì có bằng chứng thực thi: dữ liệu nhạy cảm chỉ lưu dưới dạng ciphertext, DEK được Vault bọc, AAD chống tráo payload, API key/admin key tách biệt, audit ghi nhận truy cập, credential DB động có lease và thu hồi được, CI quét secret và ruleset chặn push trực tiếp. Các ca T01–T05, T07, T09–T12, T16 đạt; T06/T08/T13 chưa đạt do defect và giới hạn lab được ghi nhận công khai.
+Đồ án đã xây dựng được một nguyên mẫu mã hóa phong bì có bằng chứng thực thi: dữ liệu nhạy cảm chỉ lưu dưới dạng ciphertext, DEK được Vault bọc, AAD chống tráo payload, API key/admin key tách biệt, audit ghi nhận truy cập, credential DB động có lease và thu hồi được, CI quét secret và ruleset chặn push trực tiếp. Các ca T01–T05, T07, T09–T12, T16 đạt theo biên bản 31/10. T06 và T08 đã được SV2 sửa và nghiệm thu đạt ngày 05/11/2026 (`T06_T08_2026-11-05.md`). T13 chưa đạt vì lab chưa có TLS.
 
 ### 2. Bài học
 
@@ -473,7 +474,7 @@ Mã hóa chỉ có giá trị khi khóa và quyền giải mã được tách kh
 ### 3. Hướng phát triển
 
 - Bổ sung TLS/mTLS, Vault file storage + HA, backup/unseal an toàn.
-- Đóng D-01/D-02/D-03: policy tối thiểu, secret ID TTL/num_uses, rewrap + `min_decryption_version`.
+- Chạy lại T06 và T08 trên stack đã dựng bằng policy mới, rồi lưu output vào `docs/evidence/`.
 - Cache DEK có kiểm soát để giảm độ trễ, đo lại H1.
 - Chạy baseline và target trên máy tách biệt hoặc cùng cluster có giới hạn tài nguyên, đo CPU/RAM chính xác.
 - Tích hợp HSM/Confidential Computing, service mesh, và cảnh báo real-time thay vì script đọc audit.
@@ -489,7 +490,7 @@ Mã hóa chỉ có giá trị khi khóa và quyền giải mã được tách kh
 
 ## PHỤ LỤC
 
-- **Phụ lục A:** `docker-compose.yml`, `scripts/setup_vault.py`, `app/services/encryption.py`, `app/database.py`.
+- **Phụ lục A:** `docker-compose.yml`, `api/scripts/setup_vault.py`, `api/app/services/encryption.py`, `api/app/database.py`.
 - **Phụ lục B:** `bench/results/*.csv.gz`, `*_summary.json`, bảng `analyze.py`.
 - **Phụ lục C:** `docs/evidence/*.md`, ảnh chụp và video demo.
 - **Phụ lục D:** `docs/testing/test-plan.md` (T01–T16, H1–H4, defect log).

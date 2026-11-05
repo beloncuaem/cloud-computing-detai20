@@ -5,7 +5,7 @@ name: detai20
 # Do not use this stack for production or real data.
 
 x-app-build: &app-build
-  context: ./student2_project_windows
+  context: ./api
   dockerfile: Dockerfile
 
 x-app-environment: &app-environment
@@ -23,7 +23,7 @@ x-app-environment: &app-environment
   VAULT_DATABASE_MOUNT: "database"
   VAULT_DATABASE_CONNECTION: "postgres"
   VAULT_DATABASE_ROLE: "app-role"
-  VAULT_APPROLE_NAME: "student2-app"
+  VAULT_APPROLE_NAME: "app"
   VAULT_APPROLE_FILE: "/credentials/vault-credentials.json"
 
 # Only the one-shot setup container gets the root token and DB admin password.
@@ -33,6 +33,8 @@ x-init-environment: &init-environment
   VAULT_DEMO_TOKEN: "root"
   VAULT_DB_ADMIN_USER: "vault_admin"
   VAULT_DB_ADMIN_PASSWORD: "local_vault_admin_password"
+  VAULT_OPERATOR_APPROLE_NAME: "operator"
+  VAULT_OPERATOR_FILE: "/operator/operator-credentials.json"
 
 services:
   postgres:
@@ -43,7 +45,7 @@ services:
       POSTGRES_PASSWORD: "local_demo_postgres_password"
     volumes:
       - pgdata:/var/lib/postgresql/data
-      - ./student2_project_windows/sql:/docker-entrypoint-initdb.d:ro
+      - ./api/sql:/docker-entrypoint-initdb.d:ro
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U postgres -d encryption_db"]
       interval: 5s
@@ -96,6 +98,7 @@ services:
         condition: service_healthy
     volumes:
       - approle:/credentials
+      - operator:/operator
     command: ["python", "scripts/setup_vault.py"]
     restart: "no"
 
@@ -129,3 +132,4 @@ services:
 volumes:
   pgdata:
   approle:
+  operator:

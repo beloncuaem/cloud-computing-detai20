@@ -21,28 +21,55 @@ TRANSIT_KEY = os.getenv("VAULT_TRANSIT_KEY", "app-data-key")
 DATABASE_MOUNT = os.getenv("VAULT_DATABASE_MOUNT", "database")
 DATABASE_CONNECTION = os.getenv("VAULT_DATABASE_CONNECTION", "postgres")
 DATABASE_ROLE = os.getenv("VAULT_DATABASE_ROLE", "app-role")
-APPROLE_NAME = os.getenv("VAULT_APPROLE_NAME", "student2-app")
+APPROLE_NAME = os.getenv("VAULT_APPROLE_NAME", "app")
+APPROLE_POLICY = os.getenv("VAULT_APPROLE_POLICY", f"{APPROLE_NAME}-policy")
 APPROLE_OUTPUT_FILE = Path(os.getenv("VAULT_APPROLE_FILE", "./vault-credentials.json"))
+# One delivery, ten minutes. A second login with the same SecretID is rejected.
+APP_SECRET_ID_TTL = os.getenv("APP_SECRET_ID_TTL", "10m")
+APP_SECRET_ID_NUM_USES = int(os.getenv("APP_SECRET_ID_NUM_USES", "1"))
+OPERATOR_NAME = os.getenv("VAULT_OPERATOR_APPROLE_NAME", "operator")
+OPERATOR_POLICY = os.getenv("VAULT_OPERATOR_POLICY", f"{OPERATOR_NAME}-policy")
+OPERATOR_OUTPUT_FILE = Path(os.getenv("VAULT_OPERATOR_FILE", "./operator-credentials.json"))
+OPERATOR_SECRET_ID_TTL = os.getenv("OPERATOR_SECRET_ID_TTL", "1h")
+OPERATOR_SECRET_ID_NUM_USES = int(os.getenv("OPERATOR_SECRET_ID_NUM_USES", "1"))
 DB_ADMIN_USER = os.getenv("VAULT_DB_ADMIN_USER", "vault_admin")
 DB_ADMIN_PASSWORD = os.getenv("VAULT_DB_ADMIN_PASSWORD", "")
 DB_HOST = os.getenv("DB_HOST", "127.0.0.1")
 DB_PORT = os.getenv("DB_PORT", "5432")
 DB_NAME = os.getenv("DB_NAME", "encryption_db")
 
+# Workload identity: mint and unwrap data keys, and rewrap them after the
+# operator rotates the KEK. It cannot rotate, export, read key metadata, or
+# change min_decryption_version.
 APP_POLICY = f'''path "{TRANSIT_MOUNT}/datakey/plaintext/{TRANSIT_KEY}" {{
   capabilities = ["update"]
 }}
 path "{TRANSIT_MOUNT}/decrypt/{TRANSIT_KEY}" {{
   capabilities = ["update"]
 }}
-path "{TRANSIT_MOUNT}/keys/{TRANSIT_KEY}" {{
+path "{TRANSIT_MOUNT}/rewrap/{TRANSIT_KEY}" {{
+  capabilities = ["update"]
+}}
+path "{DATABASE_MOUNT}/creds/{DATABASE_ROLE}" {{
+  capabilities = ["read"]
+}}
+'''
+
+# Operator identity: key lifecycle only. This credential is not mounted into the API.
+OPERATOR_POLICY_HCL = f'''path "{TRANSIT_MOUNT}/keys/{TRANSIT_KEY}" {{
   capabilities = ["read"]
 }}
 path "{TRANSIT_MOUNT}/keys/{TRANSIT_KEY}/rotate" {{
   capabilities = ["update"]
 }}
-path "{DATABASE_MOUNT}/creds/{DATABASE_ROLE}" {{
-  capabilities = ["read"]
+path "{TRANSIT_MOUNT}/keys/{TRANSIT_KEY}/config" {{
+  capabilities = ["read", "update"]
+}}
+path "{TRANSIT_MOUNT}/rewrap/{TRANSIT_KEY}" {{
+  capabilities = ["update"]
+}}
+path "auth/approle/role/{APPROLE_NAME}/secret-id" {{
+  capabilities = ["update"]
 }}
 '''
 
@@ -102,38 +129,98 @@ def configure_database_engine(client: hvac.Client) -> None:
     print("Configured Vault Database Secrets Engine for local PostgreSQL.")
 
 
-def configure_approle(client: hvac.Client) -> None:
-    client.sys.create_or_update_policy(name="student2-app-policy", policy=APP_POLICY)
+def _enable_approle(client: hvac.Client) -> None:
     auth_response = client.sys.list_auth_methods()
     auth_methods = auth_response.get("data", auth_response)
     if "approle/" not in auth_methods:
         client.sys.enable_auth_method(method_type="approle", path="approle")
+
+
+def _write_secret_file(path: Path, role_id: str, secret_id: str) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    payload = {"role_id": role_id, "secret_id": secret_id}
+    path.write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
+    try:
+        path.chmod(stat.S_IRUSR | stat.S_IWUSR)
+    except OSError:
+        pass
+
+
+def _issue_secret(
+    client: hvac.Client,
+    role_name: str,
+    *,
+    secret_id_ttl: str,
+    secret_id_num_uses: int,
+) -> tuple[str, str]:
+    role_id = client.auth.approle.read_role_id(role_name=role_name, mount_point="approle")["data"]["role_id"]
+    secret = client.auth.approle.generate_secret_id(
+        role_name=role_name,
+        secret_id_ttl=secret_id_ttl,
+        secret_id_num_uses=secret_id_num_uses,
+        mount_point="approle",
+    )["data"]["secret_id"]
+    return role_id, secret
+
+
+def configure_approle(client: hvac.Client) -> None:
+    client.sys.create_or_update_policy(name=APPROLE_POLICY, policy=APP_POLICY)
+    client.sys.create_or_update_policy(name=OPERATOR_POLICY, policy=OPERATOR_POLICY_HCL)
+    # Drop the previous overly broad policy if this Vault still has it.
+    try:
+        client.sys.delete_policy("student2-app-policy")
+    except Exception:
+        pass
+    _enable_approle(client)
+    if APPROLE_NAME != "student2-app":
+        try:
+            client.auth.approle.delete_role(role_name="student2-app", mount_point="approle")
+        except Exception:
+            pass
+
     client.auth.approle.create_or_update_approle(
         role_name=APPROLE_NAME,
-        token_policies=["student2-app-policy"],
+        token_policies=[APPROLE_POLICY],
         token_ttl="1h",
         token_max_ttl="24h",
-        secret_id_ttl="0s",
-        secret_id_num_uses=0,
+        secret_id_ttl=APP_SECRET_ID_TTL,
+        secret_id_num_uses=APP_SECRET_ID_NUM_USES,
         bind_secret_id=True,
         mount_point="approle",
     )
-    role_id = client.auth.approle.read_role_id(
-        role_name=APPROLE_NAME, mount_point="approle"
-    )["data"]["role_id"]
-    secret_id = client.auth.approle.generate_secret_id(
-        role_name=APPROLE_NAME, mount_point="approle"
-    )["data"]["secret_id"]
-    APPROLE_OUTPUT_FILE.parent.mkdir(parents=True, exist_ok=True)
-    APPROLE_OUTPUT_FILE.write_text(
-        json.dumps({"role_id": role_id, "secret_id": secret_id}, indent=2),
-        encoding="utf-8",
+    role_id, secret_id = _issue_secret(
+        client,
+        APPROLE_NAME,
+        secret_id_ttl=APP_SECRET_ID_TTL,
+        secret_id_num_uses=APP_SECRET_ID_NUM_USES,
     )
-    try:
-        APPROLE_OUTPUT_FILE.chmod(stat.S_IRUSR | stat.S_IWUSR)
-    except OSError:
-        pass
-    print(f"Wrote AppRole credentials to {APPROLE_OUTPUT_FILE}. Keep this file private.")
+    _write_secret_file(APPROLE_OUTPUT_FILE, role_id, secret_id)
+    print(
+        f"Wrote workload AppRole to {APPROLE_OUTPUT_FILE} "
+        f"(secret_id_ttl={APP_SECRET_ID_TTL}, secret_id_num_uses={APP_SECRET_ID_NUM_USES})."
+    )
+
+    client.auth.approle.create_or_update_approle(
+        role_name=OPERATOR_NAME,
+        token_policies=[OPERATOR_POLICY],
+        token_ttl="1h",
+        token_max_ttl="4h",
+        secret_id_ttl=OPERATOR_SECRET_ID_TTL,
+        secret_id_num_uses=OPERATOR_SECRET_ID_NUM_USES,
+        bind_secret_id=True,
+        mount_point="approle",
+    )
+    operator_role_id, operator_secret_id = _issue_secret(
+        client,
+        OPERATOR_NAME,
+        secret_id_ttl=OPERATOR_SECRET_ID_TTL,
+        secret_id_num_uses=OPERATOR_SECRET_ID_NUM_USES,
+    )
+    _write_secret_file(OPERATOR_OUTPUT_FILE, operator_role_id, operator_secret_id)
+    print(
+        f"Wrote operator AppRole to {OPERATOR_OUTPUT_FILE}. "
+        "Do not mount this file into the API container."
+    )
 
 
 def main() -> None:

@@ -1,4 +1,4 @@
-# Đề tài 20 — Mã nguồn Sinh viên 2 (PostgreSQL cài trực tiếp trên Windows)
+# Đề tài 20 — API (PostgreSQL cài trực tiếp trên Windows)
 
 Bộ này **không dùng Docker**. PostgreSQL chạy trực tiếp trên Windows; FastAPI chạy bằng Python trong VS Code; Vault chạy riêng bằng `vault.exe` trên máy local.
 
@@ -7,7 +7,7 @@ Bộ này **không dùng Docker**. PostgreSQL chạy trực tiếp trên Windows
 ## 1. Cấu trúc thư mục
 
 ```text
-student2_project_windows/
+api/
 ├── app/
 │   ├── main.py
 │   ├── config.py
@@ -24,7 +24,14 @@ student2_project_windows/
 ├── scripts/
 │   ├── setup_vault.py
 │   ├── rotate_dek.py
-│   └── rotate_transit_key.py
+│   ├── rotate_transit_key.py
+│   ├── rewrap_dek.py
+│   ├── set_min_decryption_version.py
+│   ├── check_approle_privileges.py
+│   ├── prove_rotate_forbidden.py
+│   ├── prove_secret_id_reuse.py
+│   ├── show_approle_lifecycle.py
+│   └── issue_workload_secret.py
 ├── sql/
 │   ├── 00-create-roles.sql
 │   └── 01-schema.sql
@@ -47,7 +54,7 @@ Mật khẩu mặc định trong SQL phải khớp với các giá trị tương
 
 ## 3. Cấu hình và cài Python
 
-Trong Terminal PowerShell ở thư mục gốc của dự án:
+Trong Terminal PowerShell, chuyển vào thư mục `api`:
 
 ```powershell
 Copy-Item .env.example .env
@@ -90,19 +97,19 @@ Nếu lệnh `vault` không được nhận diện, mở terminal tại thư m�
 
 ## 5. Cấu hình Vault cho ứng dụng
 
-Mở **Terminal 2** ở thư mục gốc dự án; kích hoạt `.venv` nếu chưa làm. Kiểm tra `.env` có `VAULT_SETUP_TOKEN=root` và Vault đang chạy ở `127.0.0.1:8200`, rồi thực hiện:
+Mở **Terminal 2** trong thư mục `api`; kích hoạt `.venv` nếu chưa làm. Kiểm tra `.env` có `VAULT_SETUP_TOKEN=root` và Vault đang chạy ở `127.0.0.1:8200`, rồi thực hiện:
 
 ```powershell
 python scripts/setup_vault.py
 ```
 
-Script tạo Transit key, cấu hình Database Secrets Engine và AppRole; sau đó tạo `vault-credentials.json`. Ứng dụng sử dụng AppRole trong file này, không dùng token setup/root.
+Script tạo Transit key, cấu hình Database Secrets Engine và hai AppRole. Workload (`vault-credentials.json`) chỉ được sinh DEK, giải mã DEK, rewrap DEK và đọc credential DB. SecretID của workload sống 10 phút và chỉ đăng nhập được một lần; token sau đăng nhập được ghi lại trong cùng file để tiến trình sau dùng tiếp. Operator (`operator-credentials.json`) mới được xoay KEK và đặt `min_decryption_version`. Không đưa file operator vào tiến trình API.
 
 Nếu script báo lỗi đăng nhập PostgreSQL, kiểm tra `vault_admin` đã tồn tại và `VAULT_DB_ADMIN_PASSWORD` khớp chính xác với mật khẩu trong `sql/00-create-roles.sql`. Nếu báo lỗi Vault, kiểm tra Terminal 1 còn chạy và địa chỉ `VAULT_ADDR` đúng.
 
 ## 6. Khởi động ứng dụng Python
 
-Vẫn ở thư mục gốc, với `.venv` đã kích hoạt:
+Vẫn ở thư mục `api`, với `.venv` đã kích hoạt:
 
 ```powershell
 python -m uvicorn app.main:app --reload --host 127.0.0.1 --port 8000
@@ -132,14 +139,20 @@ FROM sensitive_records;
 
 ## 7. Xoay vòng khóa
 
-Giữ PostgreSQL và Vault chạy. Mở Terminal khác tại thư mục gốc, kích hoạt `.venv`:
+Giữ PostgreSQL và Vault chạy. Mở Terminal khác trong thư mục `api`, kích hoạt `.venv`. Thứ tự vòng đời KEK:
 
 ```powershell
 python scripts/rotate_transit_key.py
-python scripts/rotate_dek.py
+python scripts/rewrap_dek.py
+python scripts/set_min_decryption_version.py 2
+python scripts/check_approle_privileges.py
+python scripts/prove_rotate_forbidden.py
+python scripts/prove_secret_id_reuse.py
 ```
 
-Lệnh đầu tạo phiên bản KEK mới; không tự tạo DEK mới hay mã hóa lại dữ liệu cũ. Lệnh thứ hai tạo DEK mới và mã hóa lại các bản ghi đã lưu.
+`rotate_transit_key.py` dùng danh tính operator và chỉ tạo version KEK mới. `rewrap_dek.py` dùng danh tính workload để bọc lại DEK, không giải mã payload. `set_min_decryption_version.py` cũng dùng operator; chỉ chạy sau khi rewrap thành công, nếu không bản ghi còn version cũ sẽ không đọc được. Hai lệnh `prove_*` phải in `PASS`.
+
+`python scripts/rotate_dek.py` là thao tác khác: giải mã payload và mã hóa lại bằng DEK mới. Không dùng lệnh đó để thay cho rewrap.
 
 Để thử xoay vòng database credentials của Vault, trước tiên hãy kiểm tra endpoint Database Secrets Engine hoạt động. Sau đó đặt `USE_VAULT_DB_CREDS=true` trong `.env`, khởi động lại FastAPI và thử `POST /admin/rotation/database` với header `X-Admin-Key`. Nếu chưa cần phần nâng cao, để `false` để app dùng `app_user` cố định.
 
