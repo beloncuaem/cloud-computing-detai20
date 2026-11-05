@@ -1,4 +1,4 @@
-"""FastAPI entry point for the Student 2 project."""
+"""FastAPI entry point for the envelope-encryption API."""
 from __future__ import annotations
 
 import asyncio
@@ -60,7 +60,7 @@ async def lifespan(app: FastAPI):
 
 
 app = FastAPI(
-    title="Student 2 - Envelope Encryption API",
+    title="Envelope Encryption API",
     description=(
         "Demo API for PostgreSQL, Vault Transit envelope encryption, AppRole authentication, "
         "dynamic database credentials, and rotation experiments."

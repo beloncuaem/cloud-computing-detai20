@@ -1,5 +1,7 @@
 # Environment & Secrets
 .env
+.vscode/
+operator-credentials.json
 *.pem
 *.key
 vault-init.json

@@ -7,7 +7,7 @@ sliding window. It prints ALERT and exits 2 when the threshold is reached.
 
 Example:
     docker run --rm -v "${PWD}:/work" -w /work python:3.12-slim \
-        python student2_project_windows/scripts/alert_decrypt_rate.py \
+        python api/scripts/alert_decrypt_rate.py \
         --log bench/results/audit_attack.log --threshold 200 --window 60
 """
 from __future__ import annotations
