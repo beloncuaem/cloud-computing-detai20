@@ -16,10 +16,10 @@ from app.services.vault_client import get_operator_client
 
 def main() -> None:
     client = get_operator_client()
+    # The role already enforces secret_id_ttl=10m and secret_id_num_uses=1;
+    # the secret-id endpoint does not accept those parameters.
     secret = client.auth.approle.generate_secret_id(
         role_name=settings.vault_approle_name,
-        secret_id_ttl="10m",
-        secret_id_num_uses=1,
         mount_point="approle",
     )["data"]["secret_id"]
     path = Path(settings.vault_approle_file)
