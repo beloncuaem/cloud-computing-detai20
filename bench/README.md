@@ -19,13 +19,13 @@ New-Item -ItemType Directory -Force bench/results | Out-Null
 # Warm-up 60 giây, không ghi CSV
 docker run --rm -v "${PWD}:/work" -w /work grafana/k6:0.54.0 run `
   -e BASE_URL=http://host.docker.internal:8000 `
-  -e API_KEY=local-demo-api-key-change-me `
+  -e API_KEY=$env:API_KEY `
   -e VUS=10 -e DURATION=1m bench/k6/mixed.js
 
 # Đo chính thức (ví dụ D-lab, 50 VUs, lần 1)
 docker run --rm -v "${PWD}:/work" -w /work grafana/k6:0.54.0 run `
   -e BASE_URL=http://host.docker.internal:8000 `
-  -e API_KEY=local-demo-api-key-change-me `
+  -e API_KEY=$env:API_KEY `
   -e VUS=50 -e DURATION=3m `
   --out csv=bench/results/D-lab_50_run1.csv bench/k6/mixed.js
 ```
@@ -56,7 +56,7 @@ Không được ghi `D-lab` thành `D` trong báo cáo. Mỗi cấu hình chạy
 docker run -d --name detai20-baseline --network detai20_default `
   -p 8001:8001 -v "${PWD}/bench/baseline:/baseline:ro" -w /baseline `
   -e BASELINE_DB_DSN="postgresql://postgres:local_demo_postgres_password@postgres:5432/encryption_db" `
-  -e API_KEY="local-demo-api-key-change-me" `
+  -e API_KEY="$env:API_KEY" `
   detai20-api:local uvicorn server:app --host 0.0.0.0 --port 8001
 
 # Kiểm tra
@@ -65,7 +65,7 @@ curl.exe -s http://127.0.0.1:8001/ready
 # Đo: dùng cùng mixed.js, chỉ đổi BASE_URL và tên file A_...
 docker run --rm -v "${PWD}:/work" -w /work grafana/k6:0.54.0 run `
   -e BASE_URL=http://host.docker.internal:8001 `
-  -e API_KEY=local-demo-api-key-change-me `
+  -e API_KEY=$env:API_KEY `
   -e VUS=50 -e DURATION=3m `
   --out csv=bench/results/A_50_run1.csv bench/k6/mixed.js
 
@@ -93,13 +93,13 @@ Script in bảng p50/p95/p99, trung vị p95 theo cấu hình/VUs và overhead s
 # Terminal 1: chạy k6 50 VUs trong 3 phút
 docker run --rm -v "${PWD}:/work" -w /work grafana/k6:0.54.0 run `
   -e BASE_URL=http://host.docker.internal:8000 `
-  -e API_KEY=local-demo-api-key-change-me `
+  -e API_KEY=$env:API_KEY `
   -e VUS=50 -e DURATION=3m `
   --out csv=bench/results/E-lab_50_run1.csv bench/k6/mixed.js
 
 # Terminal 2: sau khi k6 đã chạy khoảng 60 giây
 Invoke-RestMethod -Method Post -Uri "http://127.0.0.1:8000/admin/rotation/database" `
-  -Headers @{ "X-Admin-Key" = "local-demo-admin-key-change-me" }
+  -Headers @{ "X-Admin-Key" = $env:ADMIN_API_KEY }
 docker compose run --rm --no-deps --entrypoint python vault-init scripts/rotate_transit_key.py
 ```
 

@@ -68,6 +68,8 @@ Mở `.env` và kiểm tra ít nhất:
 
 ```dotenv
 DATABASE_URL=postgresql+psycopg://app_user:local_app_password@localhost:5432/encryption_db
+API_KEY=<tự sinh, bắt buộc>
+ADMIN_API_KEY=<tự sinh, bắt buộc>
 USE_VAULT_DB_CREDS=false
 DB_HOST=127.0.0.1
 DB_PORT=5432
@@ -120,7 +122,7 @@ Mở các địa chỉ:
 - Health: http://127.0.0.1:8000/health
 - Readiness (cần cả PostgreSQL và Vault): http://127.0.0.1:8000/ready
 
-Trong Swagger, gọi `POST /records` với header `X-API-Key` (giá trị ở `.env`, mặc định `local-demo-api-key-change-me`) và body:
+Trong Swagger, gọi `POST /records` với header `X-API-Key` (giá trị do biến môi trường `API_KEY` hoặc `.env` cung cấp, không có mặc định) và body:
 
 ```json
 {

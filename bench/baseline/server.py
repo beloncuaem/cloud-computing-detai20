@@ -15,7 +15,7 @@ the compose network, for example:
     docker run -d --name detai20-baseline --network detai20_default \
       -p 8001:8001 -v "<repo>/bench/baseline:/baseline:ro" -w /baseline \
       -e BASELINE_DB_DSN="postgresql://postgres:local_demo_postgres_password@postgres:5432/encryption_db" \
-      -e API_KEY="local-demo-api-key-change-me" \
+      -e API_KEY="$API_KEY" \
       detai20-api:local uvicorn server:app --host 0.0.0.0 --port 8001
 
 Demo credentials only; see docs/infra/local-stack.md. Do not use real data.

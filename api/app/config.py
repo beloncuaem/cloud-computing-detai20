@@ -36,8 +36,9 @@ class Settings:
     vault_database_role: str = os.getenv("VAULT_DATABASE_ROLE", "app-role")
     vault_approle_name: str = os.getenv("VAULT_APPROLE_NAME", "app")
 
-    api_key: str = os.getenv("API_KEY", "local-demo-api-key-change-me")
-    admin_api_key: str = os.getenv("ADMIN_API_KEY", "local-demo-admin-key-change-me")
+    # No hardcoded fallback: the keys must come from the environment or api/.env.
+    api_key: str | None = os.getenv("API_KEY")
+    admin_api_key: str | None = os.getenv("ADMIN_API_KEY")
 
 
 settings = Settings()

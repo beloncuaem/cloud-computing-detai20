@@ -23,6 +23,7 @@
 
 ## Ghi chú
 
+- Từ 11/11/2026, `API_KEY` và `ADMIN_API_KEY` không còn giá trị mặc định trong mã nguồn: API từ chối khởi động nếu biến môi trường trống (xem `.env.example` và `api/.env.example`). Các lệnh ghi trong những biên bản ở thư mục này vẫn dùng key demo `local-demo-api-key-change-me`; giữ nguyên vì đó là dữ liệu đã đo thật, không viết lại lịch sử nghiệm thu. Key lab đã được xoay và giá trị hiện tại chỉ nằm trong file `.env` (không commit).
 - Hai ảnh cũ `branch_protection.png` và `git_log.png` đã xóa ngày 31/10/2026 vì không chứng minh được trạng thái cuối (một ảnh chỉ là hộp thoại trước khi tạo ruleset, một ảnh mới có 1 tác giả và tag `v0.1`).
 - `ruleset_rules.png` chưa mở rộng mục "Require a pull request before merging" nên chưa thấy số approval yêu cầu (1). Khi tiện, chụp thêm ảnh đã mở rộng mục này.
 - Ruleset `main-1` đã gán hai required checks `gitleaks` và `unit-tests` ngày 31/10/2026 (xác nhận qua API, xem `T11_T12_2026-10-31.md`). Cần chụp lại màn hình Settings → Rules → `main-1` với mục status checks mở rộng.
