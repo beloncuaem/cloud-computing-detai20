@@ -94,7 +94,7 @@ def plot_benchmark(runs: dict[tuple[str, int], list[dict[str, float]]]) -> None:
     ax_rps.grid(True, alpha=0.25)
     ax_rps.legend(fontsize=8)
 
-    fig.suptitle("So sánh baseline A và D-lab (31/10/2026)", fontsize=12)
+    fig.suptitle("So sánh baseline A và D-lab (D-lab: 31/10; A: 31/10 + 11/11, xem mục 4.4)", fontsize=12)
     fig.tight_layout()
     fig.savefig(OUT / "fig_benchmark.png", dpi=200, bbox_inches="tight")
     plt.close(fig)
