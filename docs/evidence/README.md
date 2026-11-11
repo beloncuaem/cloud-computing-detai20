@@ -22,6 +22,7 @@
 | `T06_T08_2026-10-31.md` | T06: checker FAIL do D-01 (policy còn rotate/read metadata); T08: chưa có rewrap/min version (D-03) → **chưa đạt** | 31/10/2026 | Bản ghi defect cũ (trước sửa) |
 | `T06_T08_2026-11-05.md` | T06: checker PASS exit 0, rotate bị 403; T10: SecretID 10m/1-use; T08: đủ 7 bước xoay KEK + rewrap DEK + chặn v1 → **ĐẠT** (đóng D-01, D-02, D-03, D-06) | 05/11/2026 | Hợp lệ (SV2 nghiệm thu) |
 | `T06_T08_T15_2026-11-11.md` | SV3 tái kiểm chứng độc lập trên stack dựng lại sạch từ `main` (`down -v` → `up -d --build`): `vault-init` exit 0, smoke **9/9**, T06 checker 9/9 PASS + rotate 403, SecretID 600s/1-use + reuse bị từ chối, T08 đủ 7 bước (v1→v2, chặn v1). Phát hiện và đóng **D-09** (`generate_secret_id` nhận sai keyword làm `vault-init` exit 1) kèm regression test | 11/11/2026 | Hợp lệ (SV3 tái kiểm chứng) |
+| `git_history_tag_2026-11-11.md` | Lịch sử Git đủ 3 người đóng góp (3 email; 4 tên hiển thị vì SV2 dùng 2 tên cùng email) và tag nghiệm thu `v0.9.0-rc1` tại `b333621` (head PR #10, đã push); giải thích vì sao chưa phải `v1.0.0` | 11/11/2026 | Bản ghi terminal; cần ảnh chụp màn hình thật |
 
 ## Ghi chú
 
@@ -30,11 +31,12 @@
 - `ruleset_rules.png` chưa mở rộng mục "Require a pull request before merging" nên chưa thấy số approval yêu cầu (1). Khi tiện, chụp thêm ảnh đã mở rộng mục này.
 - Ruleset `main-1` đã gán hai required checks `gitleaks` và `unit-tests` ngày 31/10/2026 (xác nhận qua API, xem `T11_T12_2026-10-31.md`). Cần chụp lại màn hình Settings → Rules → `main-1` với mục status checks mở rộng.
 - Ảnh lỗi PowerShell (`Set-Location ... 'liệu'`) là lỗi thao tác cục bộ, không phải bằng chứng kỹ thuật, không đưa vào báo cáo.
+- Chưa có ảnh `git_log_3_authors.png`: phiên làm việc tự động ngày 11/11 mở cửa sổ terminal rồi chụp màn hình nhưng mặt bàn chụp được không chứa cửa sổ nào (kiểm bằng `EnumWindows` = 0 cửa sổ visible), nên ảnh chỉ có hình nền đã bị xóa, không commit. Bằng chứng lịch sử Git hiện là bản ghi terminal trong `git_history_tag_2026-11-11.md`; ảnh thật cần thành viên chụp trực tiếp trên máy của mình.
 
 ## Cần chụp bổ sung
 
 - [ ] PR có CI check xanh (sau khi thêm workflow Gitleaks)
-- [ ] Git log cuối dự án: đủ 3 tác giả, thẻ nghiệm thu `v0.9.0-rc1` (chỉ tag `v1.0.0` khi T13 đạt và D-05/D-08 đóng)
+- [ ] Ảnh chụp màn hình git log cuối dự án: bản ghi terminal đã có (`git_history_tag_2026-11-11.md`, 3 email tác giả, tag `v0.9.0-rc1` tại `b333621`); thành viên ngồi trước máy chạy lại các lệnh trong biên bản và chụp đặt tên `git_log_3_authors.png`. Chỉ tag `v1.0.0` khi T13 đạt và D-05/D-08 đóng
 - [ ] Bảng `sensitive_records` chỉ có `ciphertext`/`nonce`/`encrypted_dek`, không có plaintext
 - [ ] `pg_dump` hoặc tìm kiếm plaintext trả 0 kết quả
 - [ ] Log rotation KEK/DEK và thu hồi lease
