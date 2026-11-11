@@ -4,6 +4,7 @@ from __future__ import annotations
 import logging
 
 from fastapi import APIRouter, Depends, HTTPException
+from hvac.exceptions import Forbidden
 
 from app.config import settings
 from app.database import manager
@@ -36,18 +37,22 @@ def rotate_database_credentials() -> dict[str, object]:
 
 @router.post("/rotation/transit-key")
 def rotate_transit_key() -> dict[str, str]:
-    """Rotate the Vault Transit KEK version; old versions remain needed for old DEKs."""
+    """Attempt KEK rotation with the workload identity. Vault must deny it."""
     try:
         client = get_vault_client()
         client.secrets.transit.rotate_key(
             name=settings.vault_transit_key,
             mount_point=settings.vault_transit_mount,
         )
+    except Forbidden as exc:
+        raise HTTPException(
+            status_code=403,
+            detail="The workload identity cannot rotate the KEK. Use the operator identity.",
+        ) from exc
     except Exception as exc:
         logger.exception("Vault Transit key rotation failed")
         raise HTTPException(status_code=503, detail="Vault Transit key rotation failed") from exc
-    return {
-        "status": "rotated",
-        "key_name": settings.vault_transit_key,
-        "note": "This rotates the KEK version. It does not create new DEKs or re-encrypt existing payloads.",
-    }
+    raise HTTPException(
+        status_code=500,
+        detail="Workload identity was allowed to rotate the KEK; the AppRole policy is too broad.",
+    )

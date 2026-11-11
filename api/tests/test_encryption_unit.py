@@ -5,7 +5,7 @@ import pytest
 from cryptography.exceptions import InvalidTag
 from cryptography.hazmat.primitives.ciphers.aead import AESGCM
 
-from app.services.encryption import decrypt_with_dek, encrypt_with_dek
+from app.services.encryption import decrypt_with_dek, encrypt_with_dek, kek_version_from_ciphertext
 
 
 def test_encrypt_decrypt_round_trip() -> None:
@@ -38,6 +38,11 @@ def test_wrong_associated_data_fails_authentication() -> None:
 
     with pytest.raises(InvalidTag):
         decrypt_with_dek(ciphertext, key, nonce, b"record-2:phone")
+
+
+def test_kek_version_is_read_from_transit_prefix() -> None:
+    assert kek_version_from_ciphertext("vault:v2:abc") == 2
+    assert kek_version_from_ciphertext("not-a-vault-ciphertext") is None
 
 
 def test_key_and_nonce_sizes_are_checked() -> None:

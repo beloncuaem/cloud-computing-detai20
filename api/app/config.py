@@ -34,7 +34,7 @@ class Settings:
     vault_transit_key: str = os.getenv("VAULT_TRANSIT_KEY", "app-data-key")
     vault_database_mount: str = os.getenv("VAULT_DATABASE_MOUNT", "database")
     vault_database_role: str = os.getenv("VAULT_DATABASE_ROLE", "app-role")
-    vault_approle_name: str = os.getenv("VAULT_APPROLE_NAME", "student2-app")
+    vault_approle_name: str = os.getenv("VAULT_APPROLE_NAME", "app")
 
     api_key: str = os.getenv("API_KEY", "local-demo-api-key-change-me")
     admin_api_key: str = os.getenv("ADMIN_API_KEY", "local-demo-admin-key-change-me")

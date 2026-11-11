@@ -14,7 +14,7 @@
 - `chore:` Cấu hình hạ tầng, công cụ
 
 ## Cấu trúc thư mục
-- `student2_project_windows/`: mã nguồn FastAPI, SQL, script Vault (bản Windows native của SV2) và Dockerfile dự phòng
+- `api/`: mã nguồn FastAPI, SQL, script Vault và Dockerfile
 - `docker-compose.yml`: stack lab dự phòng (PostgreSQL + Vault dev + API)
 - `bench/`: kịch bản k6, script phân tích CSV và kết quả thô
 - `docs/`: báo cáo, ảnh bằng chứng, kế hoạch kiểm thử và hướng dẫn hạ tầng
@@ -29,4 +29,4 @@ docker compose up -d --build
 powershell -ExecutionPolicy Bypass -File scripts/smoke-test.ps1
 ```
 
-Chi tiết vận hành: `docs/infra/local-stack.md`. Kế hoạch kiểm thử T01–T16: `docs/testing/test-plan.md`. Hướng dẫn Windows native gốc: `student2_project_windows/README_VI.md`.
+Chi tiết vận hành: `docs/infra/local-stack.md`. Kế hoạch kiểm thử T01–T16: `docs/testing/test-plan.md`. Hướng dẫn chạy trực tiếp trên Windows: `api/README_VI.md`.

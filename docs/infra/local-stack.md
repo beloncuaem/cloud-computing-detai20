@@ -9,8 +9,8 @@ Stack này dựng PostgreSQL, Vault và API bằng một lệnh để SV3 có th
 | `postgres` | `postgres:16-alpine` | Lưu ciphertext, audit_events | Mật khẩu demo; không publish cổng ra host |
 | `vault` | `hashicorp/vault:1.20` | Transit, Database engine, AppRole | Dev mode, storage trong RAM, HTTP, root token `root` |
 | `vault-audit` | `hashicorp/vault:1.20` | Bật audit file `/tmp/vault-audit.log` | Log mất khi container Vault bị xóa |
-| `vault-init` | build từ `student2_project_windows` | Chạy `setup_vault.py` một lần | Có root token + mật khẩu `vault_admin` |
-| `api` | build từ `student2_project_windows` | FastAPI tại cổng 8000 | Chạy root trong container; không nhận root token |
+| `vault-init` | build từ `api` | Chạy `setup_vault.py` một lần | Có root token + mật khẩu `vault_admin` |
+| `api` | build từ `api` | FastAPI tại cổng 8000 | Chạy root trong container; không nhận root token |
 
 Các rủi ro còn lại phải ghi vào báo cáo: Vault dev mode, TLS chưa bật, `vault_admin` là SUPERUSER, image chạy root, audit log tạm thời. Stack này không dùng để tuyên bố đã đạt T13.
 
@@ -18,7 +18,7 @@ Các rủi ro còn lại phải ghi vào báo cáo: Vault dev mode, TLS chưa b�
 
 - Docker Desktop đang chạy, Docker Compose v2 trở lên.
 - Cổng 8000 còn trống (hoặc đặt `API_PORT` khác).
-- Repository ở trạng thái có `docker-compose.yml`, `student2_project_windows/Dockerfile` và `scripts/smoke-test.ps1`.
+- Repository ở trạng thái có `docker-compose.yml`, `api/Dockerfile` và `scripts/smoke-test.ps1`.
 
 Không cần cài Python, PostgreSQL hay Vault trên Windows.
 
@@ -99,21 +99,27 @@ Log audit có thể chứa token đã băm và metadata; không commit nguyên f
 ## 7. Kiểm tra quyền AppRole
 
 ```powershell
+docker compose run --rm --no-deps --entrypoint python vault-init scripts/show_approle_lifecycle.py
 docker compose exec -T api python scripts/check_approle_privileges.py
+docker compose exec -T api python scripts/prove_rotate_forbidden.py
+docker compose exec -T api python scripts/prove_secret_id_reuse.py
 ```
 
-Hiện tại script sẽ FAIL vì policy trong `setup_vault.py` còn cấp `read` trên metadata khóa và `update` trên đường dẫn rotate (D-01). Đây là bằng chứng cho T06, không phải lỗi của stack. Sau khi SV2 sửa policy, chạy lại `docker compose run --rm vault-init` rồi chạy checker.
+Policy workload không còn `update` trên rotate và không còn `read` trên metadata khóa. SecretID của workload là 10 phút và một lần dùng. Sau khi dựng lại stack (`docker compose up -d --build`, để `vault-init` ghi policy mới), cả bốn lệnh phải in PASS và thoát 0.
 
 ## 8. Xoay vòng
 
 ```powershell
-# Xoay KEK (hiện app còn quyền; sau khi sửa D-01 nên dùng root/operator)
-docker compose exec -T vault vault write -f transit/keys/app-data-key/rotate
+# Xoay KEK bằng danh tính operator (file này không nằm trong container api)
+docker compose run --rm --no-deps --entrypoint python vault-init scripts/rotate_transit_key.py
 
-# Rewrap sẽ do SV2 bổ sung; hiện chưa có
-# docker compose exec -T api python scripts/rewrap_dek.py
+# Rewrap DEK sang version KEK mới, bằng quyền rewrap của workload
+docker compose exec -T api python scripts/rewrap_dek.py
 
-# Xoay DEK cho toàn bộ bản ghi
+# Chặn giải mã ciphertext của version cũ
+docker compose run --rm --no-deps --entrypoint python vault-init scripts/set_min_decryption_version.py 2
+
+# Xoay DEK cho toàn bộ bản ghi (giải mã payload và mã hóa lại, khác rewrap)
 docker compose exec -T api python scripts/rotate_dek.py
 
 # Xoay credential DB động (cần USE_VAULT_DB_CREDS=true)
@@ -141,7 +147,7 @@ docker compose run --rm --no-deps vault-init python scripts/generate_decrypt_loa
 docker compose cp vault:/tmp/vault-audit.log bench/results/audit_attack.log
 
 docker run --rm -v "${PWD}:/work" -w /work python:3.12-slim `
-  python student2_project_windows/scripts/alert_decrypt_rate.py `
+  python api/scripts/alert_decrypt_rate.py `
   --log bench/results/audit_attack.log --threshold 200 --window 60
 ```
 
@@ -178,8 +184,8 @@ Ghi lại thời gian dựng lại và dung lượng image/volume cho T15. Khôn
 ## 12. Liên kết với kế hoạch kiểm thử
 
 - T01–T05, T07: chạy trực tiếp trên stack này.
-- T06: `check_approle_privileges.py` (hiện FAIL do D-01).
-- T08: cần SV2 bổ sung rewrap và `min_decryption_version`.
+- T06: `check_approle_privileges.py` và `prove_rotate_forbidden.py`.
+- T08: `rotate_transit_key.py` (operator), `rewrap_dek.py`, `set_min_decryption_version.py`.
 - T09–T10: bật `USE_VAULT_DB_CREDS=true`, dùng lệnh trong test plan.
 - T11–T12: chạy trên Git/GitHub, không phụ thuộc stack.
 - T13: **chưa đạt** với stack này; chờ SV1.

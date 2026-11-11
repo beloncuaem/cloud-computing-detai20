@@ -18,7 +18,8 @@
 | `T15_reproducibility_2026-10-31.md` | T15: dựng lại từ clone sạch 24 giây, smoke 9/9, dọn sạch container/volume | 31/10/2026 | Bản ghi terminal; phạm vi nhánh `infra/fallback-compose` |
 | `T11_T12_2026-10-31.md` | T11: 14 commit 0 leak, secret giả bị bắt; T12: ruleset `main-1` bắt buộc PR + 1 approval + `gitleaks`/`unit-tests` | 31/10/2026 | Bản ghi terminal; cần ảnh chụp |
 | `T13_partial_2026-10-31.md` | T13: image không chứa secret; PostgreSQL `ssl=off`, chưa có TLS → **chưa đạt**, chờ SV1 | 31/10/2026 | Bản ghi một phần; cần ảnh chụp |
-| `T06_T08_2026-10-31.md` | T06: checker FAIL do D-01 (policy còn rotate/read metadata); T08: chưa có rewrap/min version (D-03) → **chưa đạt** | 31/10/2026 | Bản ghi defect; cần ảnh chụp |
+| `T06_T08_2026-10-31.md` | T06: checker FAIL do D-01 (policy còn rotate/read metadata); T08: chưa có rewrap/min version (D-03) → **chưa đạt** | 31/10/2026 | Bản ghi defect cũ (trước sửa) |
+| `T06_T08_2026-11-05.md` | T06: checker PASS exit 0, rotate bị 403; T10: SecretID 10m/1-use; T08: đủ 7 bước xoay KEK + rewrap DEK + chặn v1 → **ĐẠT** (đóng D-01, D-02, D-03, D-06) | 05/11/2026 | Hợp lệ (SV2 nghiệm thu) |
 
 ## Ghi chú
 

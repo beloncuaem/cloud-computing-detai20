@@ -7,7 +7,9 @@ import re
 import uuid
 from dataclasses import dataclass
 
+import hvac
 from cryptography.hazmat.primitives.ciphers.aead import AESGCM
+
 from app.config import settings
 
 _VERSION_RE = re.compile(r"^vault:v(\d+):")
@@ -20,6 +22,12 @@ class EncryptedPayload:
     encrypted_dek: str
     kek_name: str
     kek_version: int | None
+
+
+def kek_version_from_ciphertext(encrypted_dek: str) -> int | None:
+    """Read the KEK version embedded in a Vault Transit ciphertext (`vault:vN:...`)."""
+    match = _VERSION_RE.match(encrypted_dek)
+    return int(match.group(1)) if match else None
 
 
 def associated_data(record_id: uuid.UUID, record_type: str) -> bytes:
@@ -74,8 +82,7 @@ def encrypt_sensitive_value(
         nonce=nonce,
         aad=associated_data(record_id, record_type),
     )
-    match = _VERSION_RE.match(encrypted_dek)
-    version = int(match.group(1)) if match else None
+    version = kek_version_from_ciphertext(encrypted_dek)
     return EncryptedPayload(
         ciphertext=ciphertext,
         nonce=nonce,

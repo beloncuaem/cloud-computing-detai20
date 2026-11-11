@@ -80,11 +80,11 @@ Các lệnh `docker compose ...` chạy từ thư mục gốc repository. Nếu 
 | T03 | Tamper detection | Sửa ciphertext bị phát hiện | HTTP 503, audit ghi failure | ĐẠT |
 | T04 | AAD binding | Hoán đổi ciphertext giữa 2 bản ghi bị phát hiện | HTTP 503 | ĐẠT |
 | T05 | API authentication | Thiếu/sai API key bị chặn | 401; key đúng 201 | ĐẠT (401/401/403) |
-| T06 | AppRole least privilege | App không rotate/export KEK | Checker PASS; rotate/export bị 403 | CHƯA ĐẠT — D-01 |
+| T06 | AppRole least privilege | App không rotate/export KEK | Checker PASS; rotate/export bị 403 | ĐÃ ĐẠT (05/11) — D-01 đóng |
 | T07 | Audit | Ghi nhận Transit/Database | Audit log có `transit/decrypt`, `database/creds`; không có plaintext | ĐẠT |
-| T08 | KEK rotation + rewrap | Xoay KEK, rewrap, chặn version cũ | Rewrap sang version mới; `min_decryption_version` chặn v1 | CHƯA ĐẠT — D-03 |
+| T08 | KEK rotation + rewrap | Xoay KEK, rewrap, chặn version cũ | Rewrap sang version mới; `min_decryption_version` chặn v1 | ĐÃ ĐẠT (05/11) — D-03 đóng |
 | T09 | DB credential rotation | Xoay mật khẩu DB dưới tải | Lỗi < 0,1%; pool mới hoạt động | ĐẠT (20 VUs/1 phút + E-lab 50 VUs/3 phút) |
-| T10 | Lease lifecycle | Gia hạn/thu hồi lease | Credential bị thu hồi không đăng nhập được | ĐẠT; D-02 còn mở |
+| T10 | Lease lifecycle | Gia hạn/thu hồi lease | Credential bị thu hồi không đăng nhập được | ĐÃ ĐẠT (Lease 31/10; SecretID 05/11) — D-02 đóng |
 | T11 | Secret scanning | Gitleaks chặn secret | 0 finding trên repo; secret giả bị phát hiện | ĐẠT |
 | T12 | Branch protection | Chặn push trực tiếp/force push; bắt buộc PR + approval | GitHub từ chối; PR chỉ merge sau approval | ĐẠT một phần (API + ảnh) |
 | T13 | TLS / at rest | Bảo vệ trên đường truyền và ổ đĩa | TLS bật; BitLocker/volume encryption bật | CHƯA ĐẠT — thiếu TLS |
@@ -266,16 +266,18 @@ docker compose exec -T api python scripts/check_approle_privileges.py
 
 Script kiểm tra `sys/capabilities-self` cho các path:
 
-- Được phép: `transit/datakey/plaintext/app-data-key`, `transit/decrypt/app-data-key`, `database/creds/app-role`.
-- Bị cấm: `transit/keys/app-data-key/rotate`, `transit/keys/app-data-key` (đọc metadata/version), `transit/export/app-data-key`, `transit/keys/app-data-key/config`.
+- Được phép: `transit/datakey/plaintext/app-data-key`, `transit/decrypt/app-data-key`, `transit/rewrap/app-data-key`, `database/creds/app-role`. Rewrap là quyền của workload vì bước 4 của T08 chạy trong container `api`.
+- Bị cấm: `transit/keys/app-data-key/rotate`, `transit/keys/app-data-key` (đọc metadata/version), `transit/export/app-data-key`, `transit/export/encryption-key/app-data-key`, `transit/keys/app-data-key/config`.
 
-Ngoài ra, thử gọi trực tiếp (lệnh một dòng; lỗi 403 sẽ làm Python thoát khác 0 — đó là kết quả mong đợi):
+Không đăng nhập lại bằng SecretID trong lệnh kiểm tra rotate. SecretID chỉ dùng một lần; lệnh một dòng tự login sẽ bị từ chối trước khi chạm path rotate, nên không chứng minh được 403. `prove_rotate_forbidden.py` dùng lại token đã lưu.
+
+Sau checker, chạy thêm:
 
 ```powershell
-docker compose exec -T api python -c "import json,hvac; from pathlib import Path; c=json.loads(Path('/credentials/vault-credentials.json').read_text()); v=hvac.Client(url='http://vault:8200'); v.auth.approle.login(role_id=c['role_id'], secret_id=c['secret_id']); v.secrets.transit.rotate_key(name='app-data-key', mount_point='transit')"
+docker compose exec -T api python scripts/prove_rotate_forbidden.py
 ```
 
-**Kỳ vọng:** checker PASS; rotate/export bị từ chối (403). Hiện tại policy trong `setup_vault.py` còn cấp `update` cho path rotate và `read` cho metadata khóa → **D-01** (đúng như output của checker), nên checker sẽ FAIL cho đến khi SV2 sửa. Sau khi sửa, phải chạy lại `vault-init` để ghi policy mới rồi chạy lại checker; đọc metadata khóa cũng không cần thiết cho luồng datakey/decrypt.
+**Kỳ vọng:** checker PASS và thoát 0; `prove_rotate_forbidden.py` in `PASS` vì Vault trả 403. Policy workload trong `api/scripts/setup_vault.py` không còn `update` rotate và không còn `read` metadata. Phải dựng lại stack để `vault-init` ghi policy mới trước khi chạy checker. Bằng chứng ngày 31/10 là bản policy cũ.
 
 **Bằng chứng:** ảnh checker PASS/FAIL; ảnh lỗi 403 đã che token.
 
@@ -301,38 +303,42 @@ docker compose exec -T vault sh -c "grep -a -c '0901234567' /tmp/vault-audit.log
 
 **Mục tiêu:** Chứng minh vòng đời KEK: tạo version mới, rewrap DEK cũ, chặn giải mã version đã nghỉ hưu.
 
-**Trạng thái:** ứng dụng hiện chỉ có `rotate_transit_key.py` (tạo version mới), chưa có rewrap và `min_decryption_version` → **D-03**. Ca này chỉ ĐẠT sau khi SV2 bổ sung.
+**Trạng thái mã:** `rotate_transit_key.py` và `set_min_decryption_version.py` dùng AppRole operator; `rewrap_dek.py` dùng AppRole workload. `POST /admin/rotation/transit-key` giữ lại để chứng minh workload bị 403, không còn xoay khóa. Ca này ĐẠT chỉ sau khi chạy đủ 7 bước và lưu output.
 
-**Các bước dự kiến:**
+**Các bước:**
 
 ```powershell
-# 1) Tạo bản ghi, ghi nhận kek_version = 1
+# 1) Tạo bản ghi, ghi nhận kek_version = 1 và giữ ciphertext DEK cũ
 $r = Invoke-RestMethod -Method Post -Uri "$API/records" -Headers $Headers `
   -Body (@{ record_type = "rotation_test"; value = "rotation-value" } | ConvertTo-Json)
 $meta1 = Invoke-RestMethod -Uri "$API/records/$($r.id)/metadata" -Headers $Headers
 $meta1.kek_version
+$oldDek = docker compose exec -T postgres psql -U postgres -d encryption_db -tA -c `
+  "SELECT encrypted_dek FROM sensitive_records WHERE id = '$($r.id)';"
 
-# 2) Xoay KEK bằng danh tính operator (root trong lab), KHÔNG dùng AppRole của app
-docker compose exec -T vault vault write -f transit/keys/app-data-key/rotate
+# 2) Xoay KEK bằng AppRole operator. Không dùng API key và không dùng AppRole workload.
+docker compose run --rm --no-deps --entrypoint python vault-init scripts/rotate_transit_key.py
 
 # 3) Bản ghi cũ vẫn đọc được bằng version cũ
 Invoke-RestMethod -Uri "$API/records/$($r.id)" -Headers $Headers
 
-# 4) Rewrap (script SV2 bổ sung)
+# 4) Rewrap bằng quyền rewrap của workload
 docker compose exec -T api python scripts/rewrap_dek.py
 
-# 5) Kiểm tra DB đã chuyển sang version mới
+# 5) Kiểm tra DB đã chuyển sang version mới và đọc lại thành công
 docker compose exec -T postgres psql -U postgres -d encryption_db -c `
   "SELECT id, kek_version, left(encrypted_dek, 12) FROM sensitive_records WHERE id = '$($r.id)';"
+Invoke-RestMethod -Uri "$API/records/$($r.id)" -Headers $Headers
 
-# 6) Chặn version cũ
-docker compose exec -T vault vault write transit/keys/app-data-key/config min_decryption_version=2
+# 6) Operator chặn version cũ
+docker compose run --rm --no-deps --entrypoint python vault-init scripts/set_min_decryption_version.py 2
 
-# 7) Một ciphertext v1 cũ phải bị từ chối
-docker compose exec -T vault vault write transit/decrypt/app-data-key ciphertext="vault:v1:<ciphertext_cu>"
+# 7) Ciphertext v1 đã lưu ở bước 1 phải bị từ chối; bản ghi đã rewrap vẫn đọc được
+docker compose exec -T vault vault write transit/decrypt/app-data-key ciphertext="$oldDek"
+Invoke-RestMethod -Uri "$API/records/$($r.id)" -Headers $Headers
 ```
 
-Sau khi sửa D-01, AppRole của app không còn quyền rotate; endpoint `/admin/rotation/transit-key` và `rotate_transit_key.py` phải chuyển sang danh tính operator riêng hoặc bị bỏ. Vì vậy ca này dùng lệnh `vault` của operator trong container (stack lab đặt `VAULT_TOKEN=root`), không dùng API key admin của app.
+Endpoint `/admin/rotation/transit-key` với admin key phải trả 403. Audit phải có `transit/keys/app-data-key/rotate` từ danh tính operator và `transit/rewrap/app-data-key` từ danh tính workload.
 
 **Kỳ vọng:**
 
@@ -409,10 +415,17 @@ docker compose exec -T -e PGPASSWORD=$lease.data.password postgres `
 **Kiểm tra cấu hình AppRole:**
 
 ```powershell
-docker compose exec -T vault vault read auth/approle/role/student2-app
+docker compose exec -T vault vault read auth/approle/role/app
 ```
 
-Hiện tại `secret_id_ttl=0s`, `secret_id_num_uses=0` → **D-02** (secret ID không hết hạn, dùng lại vô hạn). Kỳ vọng sau sửa: TTL hữu hạn (ví dụ 1h) và `num_uses` giới hạn (ví dụ 1–5). Ghi rõ đây là cấu hình lab trước khi sửa.
+Workload AppRole phải có `secret_id_ttl=600` (10 phút) và `secret_id_num_uses=1`. Kiểm tra bằng:
+
+```powershell
+docker compose run --rm --no-deps --entrypoint python vault-init scripts/show_approle_lifecycle.py
+docker compose exec -T api python scripts/prove_secret_id_reuse.py
+```
+
+Kỳ vọng: cả hai lệnh in `PASS` và thoát 0. SecretID cũ dùng lại bị từ chối; token đã lưu trong file credential vẫn phục vụ API. Bản ghi ngày 31/10 phản ánh cấu hình `ttl=0`, `num_uses=0` trước khi sửa.
 
 ### T11 — Gitleaks và kiểm tra secret trong lịch sử
 
@@ -426,7 +439,7 @@ docker run --rm -v "${PWD}:/repo" ghcr.io/gitleaks/gitleaks:v8.24.0 detect `
   --source=/repo --config=/repo/.gitleaks.toml --log-opts="--all" --redact --verbose
 
 # 2) .env và file credential phải bị ignore
-git check-ignore -v student2_project_windows/.env
+git check-ignore -v api/.env
 git ls-files | Select-String -Pattern '(^|/)\.env$|vault-credentials\.json'
 
 # 3) Gieo secret giả vào thư mục tạm, KHÔNG commit vào repo
@@ -617,8 +630,8 @@ Remove-Item -Recurse -Force $tmp
 
 **Công cụ:**
 
-- `student2_project_windows/scripts/generate_decrypt_load.py`: gieo 200 lần giải mã bằng một token.
-- `student2_project_windows/scripts/alert_decrypt_rate.py`: đọc audit log JSON, đếm cửa sổ trượt 60 giây theo danh tính, in `ALERT` và exit 2 khi vượt ngưỡng.
+- `api/scripts/generate_decrypt_load.py`: gieo 200 lần giải mã bằng một token.
+- `api/scripts/alert_decrypt_rate.py`: đọc audit log JSON, đếm cửa sổ trượt 60 giây theo danh tính, in `ALERT` và exit 2 khi vượt ngưỡng.
 
 **Các bước:**
 
@@ -634,14 +647,14 @@ docker run --rm -v "${PWD}:/work" -w /work grafana/k6:0.54.0 run `
 
 docker compose cp vault:/tmp/vault-audit.log bench/results/audit_normal.log
 docker run --rm -v "${PWD}:/work" -w /work python:3.12-slim `
-  python student2_project_windows/scripts/alert_decrypt_rate.py `
+  python api/scripts/alert_decrypt_rate.py `
   --log bench/results/audit_normal.log --threshold 200 --window 60
 
 # (b) Gieo 200 lần giải mã bằng token demo/root (identity audit = token, tách khỏi app)
 docker compose run --rm --no-deps vault-init python scripts/generate_decrypt_load.py --count 200
 docker compose cp vault:/tmp/vault-audit.log bench/results/audit_attack.log
 docker run --rm -v "${PWD}:/work" -w /work python:3.12-slim `
-  python student2_project_windows/scripts/alert_decrypt_rate.py `
+  python api/scripts/alert_decrypt_rate.py `
   --log bench/results/audit_attack.log --threshold 200 --window 60
 ```
 
@@ -657,14 +670,14 @@ docker run --rm -v "${PWD}:/work" -w /work python:3.12-slim `
 
 | Mã | Mức | Mô tả | Bằng chứng | Người sửa | Trạng thái |
 |---|---|---|---|---|---|
-| D-01 | Cao | Policy app cấp `update` cho `transit/keys/app-data-key/rotate` và `read` cho metadata khóa | `setup_vault.py` | SV2 | Mở |
-| D-02 | Cao | AppRole `secret_id_ttl=0s`, `secret_id_num_uses=0` | `setup_vault.py` | SV2 | Mở |
-| D-03 | Cao | Chưa có rewrap và `min_decryption_version` sau khi xoay KEK | `rotate_transit_key.py` | SV2 | Mở |
+| D-01 | Cao | Policy app cấp `update` cho `transit/keys/app-data-key/rotate` và `read` cho metadata khóa | `api/scripts/setup_vault.py` | SV2 | Đã sửa và kiểm chứng ĐẠT (05/11); checker exit 0, rotate 403 — Đóng |
+| D-02 | Cao | AppRole `secret_id_ttl=0s`, `secret_id_num_uses=0` | `api/scripts/setup_vault.py` | SV2 | Đã sửa thành 10m và 1 lần dùng; kiểm chứng replay bị từ chối (05/11) — Đóng |
+| D-03 | Cao | Chưa có rewrap và `min_decryption_version` sau khi xoay KEK | `api/scripts/rewrap_dek.py` | SV2 | Đã có đủ 7 bước T08, rewrap thành công, chặn v1 thành công (05/11) — Đóng |
 | D-04 | Trung bình | Stack dự phòng dùng Vault dev mode, HTTP, root token; không dùng cho production | `docker-compose.yml` | SV1/SV3 | Chấp nhận trong lab, ghi rõ |
 | D-05 | Trung bình | `vault_admin` là PostgreSQL SUPERUSER | `sql/00-create-roles.sql` | SV1 | Chấp nhận trong lab, ghi rõ |
-| D-06 | Thấp | `.vscode/settings.json` còn tracked; `.gitignore` từng bỏ qua CSV benchmark | repo | SV2/SV3 | CSV đã sửa trong PR này; `.vscode` chờ dọn |
+| D-06 | Thấp | `.vscode/settings.json` còn tracked; `.gitignore` từng bỏ qua CSV benchmark | repo | SV2/SV3 | `.vscode/` đã đưa vào `.gitignore` và bỏ khỏi index — Đóng |
 | D-07 | Trung bình | Chưa có cấu hình baseline plaintext (A) cho H1 | `bench/baseline/server.py` | SV2/SV3 | Đã có baseline, giữ tách khỏi app |
-| D-08 | Trung bình | Pool 5+10, một Uvicorn worker; connection bị giữ trong lúc gọi Vault | `student2_project_windows/app/database.py` | SV2/SV3 | Mở; đã ghi trong mục 4.4 |
+| D-08 | Trung bình | Pool 5+10, một Uvicorn worker; connection bị giữ trong lúc gọi Vault | `api/app/database.py` | SV2/SV3 | Mở; đã ghi trong mục 4.4 |
 
 ## 7. Điều kiện nghiệm thu
 

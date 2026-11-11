@@ -3,6 +3,7 @@
 .env.*
 !.env.example
 vault-credentials.json
+operator-credentials.json
 .venv/
 venv/
 __pycache__/
