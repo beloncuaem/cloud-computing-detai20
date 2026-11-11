@@ -90,14 +90,16 @@ thời điểm nghiệm thu 11/11/2026, commit b333621.
 
 ### 4.1. Cập nhật sau khi gắn tag (cùng ngày 11/11)
 
-Sau commit `b333621` mà tag trỏ tới, nhánh `docs/report-sync-va-demo-script` có thêm **hai commit chỉ bổ sung bằng chứng**, không thay đổi mã nguồn ứng dụng:
+Sau commit `b333621` mà tag trỏ tới, nhánh `docs/report-sync-va-demo-script` có thêm các commit **chỉ bổ sung bằng chứng**, không thay đổi mã nguồn ứng dụng. Hai commit nội dung chính:
 
 | Commit | Nội dung |
 |---|---|
 | `0906e48` | Thêm chính biên bản này (`git_history_tag_2026-11-11.md`) |
 | `15acc08` | Phụ lục mục 8 của `T06_T08_T15_2026-11-11.md`: xoay khóa lab lần 2, dựng lại sạch, smoke 9/9 |
 
-Vì vậy **tag `v0.9.0-rc1` vẫn trỏ `b333621`, không di chuyển** (đã push; di chuyển tag là viết lại lịch sử công khai). Head PR #10 sau hai commit này là `15acc08`. Bản ghi ở mục 2 và bảng mục 3 được chụp **trước** `0906e48`, nên số commit của SV3 trong bảng là 29; sau hai commit bổ sung là **31**, tổng `git rev-list --all --count` = **39**, số email tác giả khác nhau vẫn là **3**. Kết luận "đủ 3 người đóng góp" không thay đổi.
+Bảng không liệt kê các commit hiệu đính câu chữ của riêng mục 4.1 (kể cả commit chứa dòng này).
+
+Vì vậy **tag `v0.9.0-rc1` vẫn trỏ `b333621`, không di chuyển** (đã push; di chuyển tag là viết lại lịch sử công khai). Head PR #10 tiếp tục tiến sau tag; xem head hiện tại bằng `git log --oneline -3 origin/docs/report-sync-va-demo-script`. Bản ghi ở mục 2 và bảng mục 3 được chụp **trước** `0906e48`, nên số commit của SV3 trong bảng là 29. Đo lại **tại commit `15acc08`**: SV3 = **31**, `git rev-list --all --count` = **39**, số email tác giả khác nhau vẫn là **3**. Các commit sau đó chỉ làm tăng đếm, không đổi kết luận "đủ 3 người đóng góp".
 
 Trạng thái nghiệm thu cuối cùng trên `main` sẽ được đánh dấu bằng `v1.0.0` sau khi PR #10 merge **và** T13 đạt, D-05/D-08 đóng hoặc được chấp nhận rủi ro bằng văn bản.
 
