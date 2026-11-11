@@ -1,11 +1,15 @@
 [CmdletBinding()]
 param(
     [string]$BaseUrl = "http://127.0.0.1:8000",
-    [string]$ApiKey = "local-demo-api-key-change-me",
+    [string]$ApiKey = $env:API_KEY,
     [int]$TimeoutSeconds = 120
 )
 
 $ErrorActionPreference = "Stop"
+
+if ([string]::IsNullOrWhiteSpace($ApiKey)) {
+    throw "API key is not configured. Set the API_KEY environment variable or pass -ApiKey."
+}
 
 $RepoRoot = Split-Path -Parent $PSScriptRoot
 Push-Location $RepoRoot

@@ -11,7 +11,7 @@ import { check, sleep } from 'k6';
 // Run through Docker so the host does not need k6 installed:
 //   docker run --rm -v "${PWD}:/work" -w /work grafana/k6:0.54.0 run `
 //     -e BASE_URL=http://host.docker.internal:8000 `
-//     -e API_KEY=local-demo-api-key-change-me `
+//     -e API_KEY=$env:API_KEY `
 //     -e VUS=50 -e DURATION=3m `
 //     --out csv=bench/results/D-lab_50_run1.csv bench/k6/mixed.js
 

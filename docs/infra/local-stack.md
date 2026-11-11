@@ -26,10 +26,13 @@ Không cần cài Python, PostgreSQL hay Vault trên Windows.
 
 ```powershell
 # Từ thư mục gốc repository
+Copy-Item .env.example .env   # rồi điền API_KEY / ADMIN_API_KEY vào file .env
 docker compose up -d --build
 docker compose ps
 docker compose logs -f api
 ```
+
+`docker compose` sẽ báo lỗi ngay nếu `API_KEY` hoặc `ADMIN_API_KEY` trống; mã nguồn không còn key cài sẵn.
 
 Lần đầu sẽ build image, pull PostgreSQL/Vault và chạy `vault-init`. Khi `api` healthy:
 
@@ -40,6 +43,7 @@ Lần đầu sẽ build image, pull PostgreSQL/Vault và chạy `vault-init`. Kh
 Kiểm tra nhanh:
 
 ```powershell
+$env:API_KEY = "<giá trị API_KEY trong file .env>"
 powershell -ExecutionPolicy Bypass -File scripts/smoke-test.ps1
 ```
 
@@ -52,14 +56,18 @@ Compose đọc biến từ file `.env` ở thư mục gốc (đã bị `.gitigno
 | Biến | Mặc định | Ý nghĩa |
 |---|---|---|
 | `API_PORT` | `8000` | Cổng host của API |
-| `API_KEY` | `local-demo-api-key-change-me` | API key cho `/records` |
-| `ADMIN_API_KEY` | `local-demo-admin-key-change-me` | Admin key cho `/admin` |
+| `API_KEY` | không có — bắt buộc | API key cho `/records` |
+| `ADMIN_API_KEY` | không có — bắt buộc | Admin key cho `/admin` |
 | `USE_VAULT_DB_CREDS` | `false` | `true` để app dùng credential động của Vault |
 
 Ví dụ bật dynamic DB credentials:
 
 ```powershell
-"USE_VAULT_DB_CREDS=true" | Set-Content -Path .env -Encoding ascii
+@'
+API_KEY=<key-cua-ban>
+ADMIN_API_KEY=<admin-key-cua-ban>
+USE_VAULT_DB_CREDS=true
+'@ | Set-Content -Path .env -Encoding ascii
 docker compose up -d --force-recreate api
 docker compose exec -T api python -c "import urllib.request; print(urllib.request.urlopen('http://127.0.0.1:8000/ready').read().decode())"
 ```
@@ -124,7 +132,7 @@ docker compose exec -T api python scripts/rotate_dek.py
 
 # Xoay credential DB động (cần USE_VAULT_DB_CREDS=true)
 Invoke-RestMethod -Method Post -Uri "http://127.0.0.1:8000/admin/rotation/database" `
-  -Headers @{ "X-Admin-Key" = "local-demo-admin-key-change-me" }
+  -Headers @{ "X-Admin-Key" = $env:ADMIN_API_KEY }
 ```
 
 Ghi lại thời điểm và theo dõi k6 trong lúc xoay. Không dùng `rotate_transit_key.py` để tuyên bố đã rewrap; script đó chỉ tạo version mới.
@@ -138,7 +146,7 @@ docker compose exec -T vault sh -c "export VAULT_ADDR=http://127.0.0.1:8200 VAUL
 # 1) Tải nền 10 phút qua API (identity audit = approle), phải KHÔNG cảnh báo
 docker run --rm -v "${PWD}:/work" -w /work grafana/k6:0.54.0 run `
   -e BASE_URL=http://host.docker.internal:8000 `
-  -e API_KEY=local-demo-api-key-change-me `
+  -e API_KEY=$env:API_KEY `
   -e VUS=5 -e SLEEP=2 -e DURATION=10m bench/k6/mixed.js
 
 # 2) Burst 200 lần giải mã bằng token root (identity tách khỏi AppRole của app)

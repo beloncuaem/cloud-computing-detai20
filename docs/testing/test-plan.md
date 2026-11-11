@@ -55,11 +55,13 @@ Get-CimInstance Win32_Processor | Select-Object Name, NumberOfCores, NumberOfLog
 
 ```powershell
 $API       = "http://127.0.0.1:8000"
-$ApiKey    = "local-demo-api-key-change-me"
-$AdminKey  = "local-demo-admin-key-change-me"
+$ApiKey    = $env:API_KEY
+$AdminKey  = $env:ADMIN_API_KEY
 $Headers   = @{ "X-API-Key" = $ApiKey; "Content-Type" = "application/json" }
 $Admin     = @{ "X-Admin-Key" = $AdminKey; "Content-Type" = "application/json" }
 ```
+
+`API_KEY` và `ADMIN_API_KEY` phải có trong biến môi trường của shell (lấy từ file `.env` ở gốc repo); mã nguồn không còn key cài sẵn. Không ghi giá trị key thật vào tài liệu hay slide.
 
 Các lệnh `docker compose ...` chạy từ thư mục gốc repository. Nếu dùng stack native Windows của SV2, thay `docker compose exec -T postgres psql -U postgres -d encryption_db` bằng `psql` trên máy và giữ nguyên phần còn lại.
 
@@ -357,7 +359,7 @@ Endpoint `/admin/rotation/transit-key` với admin key phải trả 403. Audit p
 
 ```powershell
 # Tạo file .env ở thư mục gốc repository (đã bị .gitignore)
-"USE_VAULT_DB_CREDS=true" | Set-Content -Path .env -Encoding ascii
+"API_KEY=$ApiKey`nADMIN_API_KEY=$AdminKey`nUSE_VAULT_DB_CREDS=true" | Set-Content -Path .env -Encoding ascii
 docker compose up -d --force-recreate api
 Invoke-RestMethod -Uri "$API/ready" | ConvertTo-Json
 ```
@@ -543,13 +545,13 @@ New-Item -ItemType Directory -Force bench/results | Out-Null
 # Warm-up (không xuất CSV)
 docker run --rm -v "${PWD}:/work" -w /work grafana/k6:0.54.0 run `
   -e BASE_URL=http://host.docker.internal:8000 `
-  -e API_KEY=local-demo-api-key-change-me `
+  -e API_KEY=$ApiKey `
   -e VUS=10 -e DURATION=1m bench/k6/mixed.js
 
 # Lần đo chính thức: lặp run1..run5
 docker run --rm -v "${PWD}:/work" -w /work grafana/k6:0.54.0 run `
   -e BASE_URL=http://host.docker.internal:8000 `
-  -e API_KEY=local-demo-api-key-change-me `
+  -e API_KEY=$ApiKey `
   -e VUS=50 -e DURATION=3m `
   --out csv=bench/results/D-lab_50_run1.csv bench/k6/mixed.js
 ```
@@ -642,7 +644,7 @@ docker compose exec -T vault sh -c "export VAULT_ADDR=http://127.0.0.1:8200 VAUL
 # (a) Tải bình thường 10 phút qua API (identity audit = approle)
 docker run --rm -v "${PWD}:/work" -w /work grafana/k6:0.54.0 run `
   -e BASE_URL=http://host.docker.internal:8000 `
-  -e API_KEY=local-demo-api-key-change-me `
+  -e API_KEY=$ApiKey `
   -e VUS=5 -e SLEEP=2 -e DURATION=10m bench/k6/mixed.js
 
 docker compose cp vault:/tmp/vault-audit.log bench/results/audit_normal.log

@@ -41,6 +41,11 @@ async def _automatic_db_rotation_loop() -> None:
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    if not settings.api_key or not settings.admin_api_key:
+        raise RuntimeError(
+            "API_KEY and ADMIN_API_KEY must be provided as environment variables "
+            "or in api/.env (see api/.env.example); refusing to start with empty keys"
+        )
     manager.initialize()
     app.state.rotation_task = None
     if settings.use_vault_db_creds:
