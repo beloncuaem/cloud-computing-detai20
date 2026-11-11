@@ -12,6 +12,7 @@ Câu hỏi nghiên cứu: *Mã hóa chỉ có ý nghĩa bảo vệ đến đâu 
 | Thành viên | Bùi Ngô Anh Quang (SV3 — Tester/DevSecOps, nhóm trưởng); hothienphu (SV1 — Infra & Security); Nguyễn Minh Hiếu / Hieu0408 (SV2 — Dev & Automation) |
 | Mã nguồn | https://github.com/beloncuaem/cloud-computing-detai20 |
 | Thời điểm | Tháng 11/2026 |
+| Phiên bản nghiệm thu | `v0.9.0-rc1` (release candidate). Chỉ gắn `v1.0.0` khi T13 đạt và D-05/D-08 được đóng hoặc chấp nhận rủi ro bằng văn bản — xem mục 4.5 |
 
 > **Phạm vi và giới hạn của bản báo cáo.** Hệ thống được xây dựng trong môi trường lab cục bộ (Docker Desktop trên Windows 11), dùng dữ liệu giả hoàn toàn. Vault chạy dev mode một nút, chưa có TLS; PostgreSQL dùng mật khẩu demo và role `vault_admin` có quyền SUPERUSER. Các điểm này được ghi nhận là rủi ro còn lại (Chương 5), không đại diện cho cấu hình production. Báo cáo phân biệt rõ cấu hình đã đo là `D-lab` (envelope encryption qua HTTP) với cấu hình `D` lý thuyết có TLS.
 
@@ -193,7 +194,7 @@ Ranh giới bảo mật:
 | `transit/export/app-data-key` | **deny** | Không export khóa |
 | `transit/keys/app-data-key/config` | **deny** | Không sửa cấu hình khóa |
 
-Mã ngày 05/11/2026 trong `api/scripts/setup_vault.py` đã tách hai danh tính. AppRole `app` chỉ có bốn path ở bảng trên; AppRole `operator` giữ rotate, đọc metadata, sửa `min_decryption_version` và cấp SecretID mới. SecretID của workload có `secret_id_ttl=10m` và `secret_id_num_uses=1`. Bằng chứng T06 ngày 31/10 ghi nhận policy cũ còn quyền rotate; ca đó cần chạy lại bằng `check_approle_privileges.py` trước khi ghi ĐẠT.
+Mã ngày 05/11/2026 trong `api/scripts/setup_vault.py` đã tách hai danh tính. AppRole `app` chỉ có bốn path ở bảng trên; AppRole `operator` giữ rotate, đọc metadata, sửa `min_decryption_version` và cấp SecretID mới. SecretID của workload có `secret_id_ttl=10m` và `secret_id_num_uses=1`. Ca T06 đã được nghiệm thu ĐẠT ngày 05/11/2026: `check_approle_privileges.py` in `PASS` cho cả 5 path bị cấm và 4 path bắt buộc rồi exit 0; `prove_rotate_forbidden.py` xác nhận gọi rotate bằng AppRole workload trả 403; endpoint `/admin/rotation/transit-key` cũng trả 403 với thông báo phải dùng danh tính operator. Biên bản: `docs/evidence/T06_T08_2026-11-05.md` (bản 31/10 ghi nhận policy cũ còn quyền rotate, được giữ lại làm mốc trước-sau).
 
 **Vòng đời bí mật 5 bước:**
 
@@ -210,8 +211,8 @@ Mã ngày 05/11/2026 trong `api/scripts/setup_vault.py` đã tách hai danh tín
 | Đọc trộm database | Ciphertext + DEK bọc bởi KEK trong Vault | T01, T02, T03 |
 | Tráo ciphertext giữa bản ghi | AAD `record_id:record_type` | T04 |
 | Dùng API không có quyền | API key + admin key riêng | T05 |
-| AppRole bị lạm dụng để xoay/export khóa | Policy least privilege; rotate thuộc operator | T06 (mã đã siết; bằng chứng 31/10 là bản cũ) |
-| Xoay khóa làm mất dữ liệu | Giữ version cũ, rewrap, min version | T08 (script đã có; chờ chạy lại 7 bước) |
+| AppRole bị lạm dụng để xoay/export khóa | Policy least privilege; rotate thuộc operator | T06 (ĐẠT 05/11: checker exit 0, rotate trả 403) |
+| Xoay khóa làm mất dữ liệu | Giữ version cũ, rewrap, min version | T08 (ĐẠT 05/11: đủ 7 bước, v1 bị chặn) |
 | Credential DB bị lộ | Dynamic secret + lease TTL/revoke | T09, T10 |
 | Secret trong Git/image | Gitleaks + `.dockerignore` + CI | T11, T12, T13 |
 | Giải mã bất thường | Audit + cảnh báo 200/phút | T16 |
@@ -220,7 +221,7 @@ Mã ngày 05/11/2026 trong `api/scripts/setup_vault.py` đã tách hai danh tín
 
 ### 3.1. Môi trường và hạ tầng dưới dạng mã
 
-Stack lab gồm PostgreSQL 16, Vault 1.20 (dev mode), vault-audit (bật file audit), vault-init (cấu hình một lần) và API FastAPI. File `docker-compose.yml` ở nhánh `infra/fallback-compose` định nghĩa:
+Stack lab gồm PostgreSQL 16, Vault 1.20 (dev mode), vault-audit (bật file audit), vault-init (cấu hình một lần) và API FastAPI. File `docker-compose.yml` trên `main` (hợp nhất từ nhánh `infra/fallback-compose`, PR #6) định nghĩa:
 
 - `postgres`: healthcheck `pg_isready`, volume `pgdata`, chạy script SQL khởi tạo.
 - `vault`: `server -dev -dev-root-token-id=root`, healthcheck `vault status`.
@@ -233,6 +234,9 @@ Các biện pháp tránh lộ secret:
 - `.dockerignore` loại `.env`, `vault-credentials.json`, venv, cache.
 - Chỉ container `vault-init` nhận root token và mật khẩu DB admin; API không nhận root token.
 - `.env` và `vault-credentials.json` nằm trong `.gitignore`; CI quét toàn bộ lịch sử bằng Gitleaks.
+- **API key/admin key chỉ đọc từ môi trường** (PR #9, hợp nhất 11/11/2026). `api/app/config.py` không còn giá trị fallback hardcode; `docker-compose.yml` dùng nội suy bắt buộc `${API_KEY:?...}` và `${ADMIN_API_KEY:?...}` nên Compose thoát ngay khi thiếu biến; `api/app/main.py` kiểm tra trong `lifespan` và `raise RuntimeError` nếu một trong hai key rỗng, tức là API **từ chối khởi động** thay vì chạy với khóa trống.
+- **So khớp key fail-closed:** `api/app/security.py` dùng `hmac.compare_digest` và trả `False` ngay khi key cấu hình bị thiếu, nên một request không bao giờ khớp được với khóa rỗng (401 cho API key, 403 cho admin key).
+- Mẫu `.env.example` ở gốc repo chỉ chứa tên biến và giá trị rỗng, kèm lệnh sinh khóa `python -c "import secrets; print(secrets.token_urlsafe(32))"`. Khóa thật nằm trong `.env` đã bị gitignore; các biên bản cũ giữ nguyên literal demo và được chú thích trong `docs/evidence/README.md`.
 
 ### 3.2. Module mã hóa phong bì
 
@@ -295,7 +299,7 @@ Pool cũ không bị đóng ngay; connection đang xử lý tiếp tục dùng c
 
 `api/scripts/rotate_transit_key.py` dùng AppRole operator để gọi `transit/keys/app-data-key/rotate`. `api/scripts/rewrap_dek.py` dùng AppRole workload để gọi `transit/rewrap` và ghi version mới vào `encrypted_dek`, không giải mã payload. `api/scripts/set_min_decryption_version.py` dùng operator để chặn ciphertext của version đã nghỉ hưu. `api/scripts/rotate_dek.py` là đường khác: giải mã payload rồi mã hóa lại bằng DEK mới.
 
-Quy trình T08 là: xoay KEK → đọc lại bản ghi cũ → rewrap toàn bộ DEK → đọc lại → đặt `min_decryption_version` → ciphertext `vault:v1:` bị từ chối. Ba script đã có trong mã ngày 05/11. Kết quả T08 trong Chương 4 vẫn là bản 31/10, khi các script này chưa tồn tại.
+Quy trình T08 là: xoay KEK → đọc lại bản ghi cũ → rewrap toàn bộ DEK → đọc lại → đặt `min_decryption_version` → ciphertext `vault:v1:` bị từ chối. Ba script đã có trong mã ngày 05/11 và ca T08 đã chạy đủ 7 bước, nghiệm thu ĐẠT ngày 05/11/2026 (`docs/evidence/T06_T08_2026-11-05.md`): `kek_version` chuyển 1 → 2, prefix `encrypted_dek` chuyển `vault:v1:` → `vault:v2:`, và Vault trả lỗi 400 `version: 1, min_decryption_version: 2` khi thử giải mã DEK cũ.
 
 ### 3.5. DevSecOps: CI, quy tắc nhánh và cảnh báo
 
@@ -308,7 +312,7 @@ Quy trình T08 là: xoay KEK → đọc lại bản ghi cũ → rewrap toàn b�
 
 **Cảnh báo:** `scripts/alert_decrypt_rate.py` đọc audit JSONL, lọc request `transit/decrypt/`, đếm cửa sổ trượt 60 giây theo danh tính (`display_name`, `entity_id`, `accessor`), in `ALERT` và exit 2 khi vượt ngưỡng. `scripts/generate_decrypt_load.py` tạo burst 200 decrypt bằng token riêng để kiểm chứng.
 
-**Kiểm thử tự động:** `scripts/smoke-test.ps1` kiểm tra 9 điểm: health, ready, tạo/đọc bản ghi, metadata, thiếu API key, sai API key, admin key, audit. `scripts/check_approle_privileges.py` kiểm tra quyền AppRole bằng `sys/capabilities-self`.
+**Kiểm thử tự động:** `scripts/smoke-test.ps1` kiểm tra 9 điểm: `health endpoint`, `ready endpoint (DB + Vault)`, `create encrypted record`, `read back plaintext`, `metadata exposes ciphertext size`, `missing API key rejected`, `wrong API key rejected`, `record key cannot call admin`, `plaintext absent from database`. Điểm thứ 9 truy vấn thẳng PostgreSQL để khẳng định không có plaintext trong bảng, không phải kiểm tra audit. Script nhận key từ `$env:API_KEY` và báo lỗi ngay nếu key rỗng. `scripts/check_approle_privileges.py` kiểm tra quyền AppRole bằng `sys/capabilities-self`.
 
 ## CHƯƠNG 4: KẾT QUẢ THỰC NGHIỆM, ĐO LƯỜNG VÀ ĐÁNH GIÁ
 
@@ -325,7 +329,7 @@ Quy trình T08 là: xoay KEK → đọc lại bản ghi cũ → rewrap toàn b�
 | k6 | grafana/k6:0.54.0 trong Docker Desktop |
 | Dữ liệu | Giá trị tổng hợp `090xxxxxxx`, `record_type = bench_phone` |
 
-**Kịch bản k6:** 70% POST `/records`, 30% GET `/records/{id}` của một bản ghi tạo trong `setup()`. Mỗi mức tải 10/50/100 VUs, `constant-vus`, mỗi lần 3 phút, warm-up 1 phút không ghi CSV. Cấu hình target chạy 5 lần mỗi mức (`D-lab`); baseline plaintext chạy 3 lần mỗi mức (`A`). Số liệu báo cáo là trung vị p95 giữa các lần; CSV thô được nén lossless và lưu cùng `_summary.json`.
+**Kịch bản k6:** 70% POST `/records`, 30% GET `/records/{id}` của một bản ghi tạo trong `setup()`. Mỗi mức tải 10/50/100 VUs, `constant-vus`, mỗi lần 3 phút, warm-up 1 phút không ghi CSV. Cấu hình target chạy 5 lần mỗi mức (`D-lab`, ngày 31/10); baseline plaintext chạy 5 lần mỗi mức (`A`: 3 lần ngày 31/10 và 2 lần bổ sung ngày 11/11). Số liệu báo cáo là trung vị p95 giữa các lần; CSV thô được nén lossless và lưu cùng `_summary.json`. Hai lượt đo của `A` cách nhau 11 ngày và khác nhau về thủ tục khởi động stack, nên mục 4.4 tách riêng từng phiên thay vì chỉ đưa một con số gộp.
 
 **Vì sao gọi `D-lab`:** hệ thống chưa có TLS và chưa có mã hóa volume; do đó không được ghi kết quả này là cấu hình `D` đầy đủ trong báo cáo. `D-lab` đo phần envelope encryption + gọi Vault qua HTTP nội bộ, là **cận dưới** của chi phí mã hóa (chưa gồm TLS).
 
@@ -338,27 +342,28 @@ Quy trình T08 là: xoay KEK → đọc lại bản ghi cũ → rewrap toàn b�
 | T03 | Ciphertext bị sửa → 503 + audit | ĐẠT | `T03_T04_tamper_2026-10-31.md` |
 | T04 | AAD binding, tráo payload → 503 | ĐẠT | cùng tệp |
 | T05 | API key/admin key | ĐẠT (401/401/403) | `T01_T05_T07_2026-10-31.md` |
-| T06 | AppRole least privilege | Mã đã siết 05/11; bằng chứng 31/10 vẫn là CHƯA ĐẠT | `T06_T08_2026-10-31.md` |
+| T06 | AppRole least privilege | ĐẠT (05/11: checker 9/9 PASS exit 0, rotate bằng workload → 403; tái kiểm chứng 11/11) | `T06_T08_2026-11-05.md`; `T06_T08_T15_2026-11-11.md` (bản 31/10 giữ làm mốc trước-sau) |
 | T07 | Audit Transit/Database, 0 plaintext | ĐẠT | `T01_T05_T07_2026-10-31.md` |
-| T08 | Xoay KEK + rewrap + chặn version cũ | Script đã có 05/11; bằng chứng 31/10 vẫn là CHƯA ĐẠT | `T06_T08_2026-10-31.md` |
+| T08 | Xoay KEK + rewrap + chặn version cũ | ĐẠT (05/11 đủ 7 bước; SV3 tái kiểm chứng độc lập 11/11 trên stack dựng lại từ `main`) | `T06_T08_2026-11-05.md`; `T06_T08_T15_2026-11-11.md` |
 | T09 | Xoay credential DB dưới tải | ĐẠT (20 VUs/1 phút và E-lab 50 VUs/3 phút, 0 lỗi) | `T09_T10_db_credentials_2026-10-31.md`; `E-lab_rotation_2026-10-31.md` |
 | T10 | Lease renew/revoke | ĐẠT | cùng tệp |
 | T11 | Gitleaks lịch sử + secret giả | ĐẠT (14 commit, 0 leak; fake bị bắt) | `T11_T12_2026-10-31.md` |
-| T12 | Ruleset bảo vệ `main` | ĐẠT (PR + 1 approval + 2 check) | cùng tệp; ảnh cần chụp |
+| T12 | Ruleset bảo vệ `main` | ĐẠT (PR + 1 approval + 2 check) | cùng tệp; 4 ảnh `ruleset_active.png`, `ruleset_rules.png`, `push_blocked_main.png`, `pr_review_merged.png` |
 | T13 | TLS + at rest | **CHƯA ĐẠT** (chưa có TLS) | `T13_partial_2026-10-31.md` |
-| T14 | Benchmark 10/50/100 VUs | ĐẠT MỘT PHẦN — A/D-lab/E-lab; H1 bị bác bỏ; thiếu B/C/D đầy đủ | `T14_benchmark_2026-10-31.md` |
-| T15 | Dọn tài nguyên/tái lập | ĐẠT (trong phạm vi nhánh dự phòng): dựng lại 24 s, smoke 9/9, dọn sạch | `T15_reproducibility_2026-10-31.md` |
+| T14 | Benchmark 10/50/100 VUs | ĐẠT MỘT PHẦN — A đủ 5 lần/mức (bổ sung 11/11), D-lab 5 lần, E-lab 3 lần; H1 bị bác bỏ; thiếu B/C/D đầy đủ | `T14_benchmark_2026-10-31.md`, `T14_A_bo_sung_2026-11-11.md` |
+| T15 | Dọn tài nguyên/tái lập | ĐẠT (31/10: dựng lại 24 s, smoke 9/9, dọn sạch; 11/11: `down -v` + `up -d --build` từ `main`, `vault-init` exit 0, smoke 9/9) | `T15_reproducibility_2026-10-31.md`; `T06_T08_T15_2026-11-11.md` |
 | T16 | Cảnh báo decrypt bất thường | ĐẠT | `T16_alert_2026-10-31.md` |
 
 **Bằng chứng an toàn nổi bật:**
 
 - Bảng `sensitive_records` chỉ có `ciphertext` 26 byte, `nonce` 12 byte, `encrypted_dek` prefix `vault:v1:`; không có cột plaintext (T01).
 - Sửa một byte ciphertext hoặc tráo payload giữa hai bản ghi đều trả HTTP 503; audit ghi `record.read`/`failure`/`decrypt_failed` (T03, T04).
-- API không có key trả 401; dùng app key cho endpoint admin trả 403 (T05).
+- API không có key trả 401; dùng app key cho endpoint admin trả 403 (T05). Từ PR #9, key chỉ đọc từ môi trường: thiếu key thì Compose thoát ngay và API `raise RuntimeError` trong `lifespan`; `hmac.compare_digest` trả `False` khi key cấu hình rỗng nên không request nào khớp được khóa trống.
+- Ngày 11/11/2026, stack dựng lại sạch từ `main` (`down -v` → `up -d --build`) cho `vault-init` exit 0 và smoke test **9/9 PASS**, trong đó điểm cuối truy vấn thẳng PostgreSQL xác nhận không có plaintext (T15, `T06_T08_T15_2026-11-11.md`).
 - Gitleaks quét 14 commit, 0 leak; token GitHub giả trong thư mục tạm bị phát hiện với rule `github-pat` (T11).
 - T16: tải nền 10 phút có 1.478 request, 0 lỗi, 469 decrypt từ AppRole, không cảnh báo; burst 200 decrypt từ token riêng bị phát hiện trong 0,4 giây (ngưỡng 200/60 giây).
 
-**Các defect còn mở (công khai, không che giấu):**
+**Trạng thái defect D-01–D-09 (công khai, không che giấu):**
 
 | Mã | Mô tả | Tác động | Người sửa |
 |---|---|---|---|
@@ -370,6 +375,7 @@ Quy trình T08 là: xoay KEK → đọc lại bản ghi cũ → rewrap toàn b�
 | D-06 | `.vscode/settings.json` bỏ khỏi Git; `.gitignore` đã chặn thư mục này | Không còn file editor trong lịch sử mới | SV2 |
 | D-07 | Baseline plaintext dựng riêng | Chỉ dùng đo H1, không merge vào app | SV3 |
 | D-08 | Pool 5+10, một Uvicorn worker; connection bị giữ trong lúc gọi Vault | Trần ~110 RPS, 100 VUs sụp; chưa scale ngang | SV2/SV3 |
+| D-09 | `generate_secret_id` bị truyền `secret_id_ttl`/`secret_id_num_uses` (hvac không nhận) ở `setup_vault.py` và `issue_workload_secret.py` | `vault-init` exit 1, không tạo role operator, **không dựng được stack từ mã đã commit**; phát hiện 11/11 khi tái lập | SV3 (đã sửa + regression test, nghiệm thu 11/11) |
 
 ### 4.3. Tính liên tục khi xoay vòng
 
@@ -381,7 +387,7 @@ Quy trình T08 là: xoay KEK → đọc lại bản ghi cũ → rewrap toàn b�
 
 **So sánh với cách truyền thống:** phương pháp thủ công (đổi mật khẩu DB + restart API) buộc connection pool cũ đóng và tạo cửa sổ lỗi 502/503 trong vài giây. Đồ án **chưa đo trực tiếp** cửa sổ downtime thủ công trên cùng máy; do đó báo cáo không đưa ra con số 3–12 giây như một kết quả thực nghiệm. Kết luận định lượng chỉ là: với cách Vault, trong 3 phút có 0 lỗi, 0 phản hồi 5xx và 0 downtime quan sát được.
 
-**Lưu ý về KEK:** xoay KEK chỉ tăng version; bản ghi cũ vẫn giải mã được bằng version cũ vì chưa có rewrap và `min_decryption_version` (D-03). Vì vậy E-lab chứng minh "xoay không gián đoạn", chưa chứng minh "hoàn tất vòng đời khóa".
+**Lưu ý về KEK:** các lượt E-lab đo ngày 31/10 chỉ xoay KEK (tăng version); khi đó chưa có `rewrap_dek.py` và `min_decryption_version`, nên bản ghi cũ vẫn giải mã bằng version cũ. Vì vậy E-lab chứng minh "xoay không gián đoạn", **chưa** chứng minh "hoàn tất vòng đời khóa". Phần hoàn tất vòng đời (rewrap toàn bộ DEK sang version mới rồi chặn version cũ) được chứng minh riêng bằng T08: nghiệm thu 05/11 và tái kiểm chứng độc lập 11/11 trên stack dựng lại từ `main` (`T06_T08_T15_2026-11-11.md`). Chưa đo lại E-lab sau khi có rewrap; đây là một khoảng trống được ghi nhận, không phải kết quả đã có.
 
 **Giới hạn:** API chạy một Uvicorn worker; cơ chế đổi engine trong bộ nhớ là process-local. Nếu scale nhiều worker/replica, cần cơ chế phối hợp (reload tín hiệu, sidecar, hoặc rolling restart có health check) thay vì swap trong bộ nhớ.
 
@@ -393,17 +399,27 @@ Bảng dưới được điền từ `bench/results/` bằng `bench/analyze.py`.
 |---:|---|---:|---:|---:|---:|---:|
 | 10 VUs | A | 238,90 | 42,22 | 55,46 | 61,49 | 0,00% |
 | 10 VUs | D-lab | 106,87 | 93,23 | 123,24 | 141,37 | 0,00% |
-| 50 VUs | A | 169,14 | 293,83 | 372,90 | 435,03 | 0,00% |
+| 50 VUs | A | 193,73 | 257,56 | 362,74 | 424,93 | 0,00% |
 | 50 VUs | D-lab | 110,55 | 393,40 | 838,68 | 1.140,35 | 0,00% |
-| 100 VUs | A | 163,61 | 610,63 | 704,61 | 773,67 | 0,00% |
+| 100 VUs | A | 164,02 | 608,71 | 699,55 | 770,39 | 0,00% |
 | 100 VUs | D-lab | 2,73 | 30.803,10 | 59.995,57 | 59.995,76 | 50,10% |
 | 50 VUs | E-lab | 77,34 | 555,73 | 1.183,01 | 1.608,78 | 0,00% |
 
-Số của D-lab là **trung vị của 5 lần chạy** mỗi mức, lấy từ `bench/results/D-lab_*_run{1..5}.csv.gz` bằng `bench/analyze.py`; cột lỗi là trung vị tỷ lệ `http_req_failed`. Ở 100 VUs, cả 5 lần đều vượt ngưỡng lỗi (cao nhất 61,12%) và p95 xấp xỉ timeout 60 giây của k6: đây là **sụp bão hòa**, không phải một cấu hình chạy được, nên không dùng để tính overhead H1. Dòng E-lab là **trung vị 3 lần chạy** có xoay vòng, dùng cho H2 chứ không dùng tính H1.
+Số của A và D-lab đều là **trung vị của 5 lần chạy** mỗi mức, lấy từ `bench/results/A_*_run{1..5}.csv.gz` và `bench/results/D-lab_*_run{1..5}.csv.gz` bằng `bench/analyze.py`; cột lỗi là trung vị tỷ lệ `http_req_failed`. Ở 100 VUs, cả 5 lần D-lab đều vượt ngưỡng lỗi (cao nhất 61,12%) và p95 xấp xỉ timeout 60 giây của k6: đây là **sụp bão hòa**, không phải một cấu hình chạy được, nên không dùng để tính overhead H1. Dòng E-lab là **trung vị 3 lần chạy** có xoay vòng, dùng cho H2 chứ không dùng tính H1.
+
+**Khác biệt giữa hai phiên đo của A (giới hạn hiệu lực).** Ba lần đầu đo ngày 31/10, chạy ngay sau loạt D-lab trên cùng một PostgreSQL đã chứa dữ liệu của D-lab và **không** khởi động lại toàn bộ stack (lý do ghi trong biên bản 31/10: Vault dev mode giữ KEK trong bộ nhớ, restart sẽ mất khóa). Hai lần bổ sung đo ngày 11/11 sau khi `docker compose down -v` rồi `up -d`: volume sạch, `sensitive_records` và `audit_events` rỗng, Vault/API vừa dựng lại. Cùng máy, cùng image `detai20-api:local`, cùng `bench/k6/mixed.js` và `bench/baseline/server.py`; hai tệp này giữa hai phiên chỉ đổi chú thích ví dụ `API_KEY`, không đổi logic tải (kiểm bằng `git diff`).
+
+| Mức tải | A 31/10 (3 lần) p95 | A 11/11 (2 lần) p95 | A gộp (5 lần) p95 | D-lab 31/10 (5 lần) p95 |
+|---|---:|---:|---:|---:|
+| 10 VUs | 55,46 | 55,75 | 55,46 | 123,24 |
+| 50 VUs | 372,90 | 294,38 | 362,74 | 838,68 |
+| 100 VUs | 704,61 | 426,20 | 699,55 | 59.995,57 (sụp bão hòa) |
+
+Ở 10 VUs hai phiên gần như trùng nhau (p95 chênh 0,5%). Ở 50 và 100 VUs phiên 11/11 nhanh hơn rõ rệt: RPS trung vị 237,33 so với 169,14 ở 50 VUs, và 275,64 so với 163,61 ở 100 VUs. Khác biệt thủ tục khởi động stack nêu trên là lời giải thích hợp lý nhất nhưng **chưa được kiểm chứng** bằng cách tái tạo đúng điều kiện 31/10; cũng chưa loại trừ trạng thái máy (tiến trình nền, nhiệt độ, phân bổ CPU/RAM cho WSL2). Hệ quả được giữ nguyên tắc: (1) số gộp 5 lần chỉ dùng để đáp ứng yêu cầu "tối thiểu 5 lần/mức" của test plan, không dùng để tuyên bố độ chính xác tuyệt đối; (2) H1 được kết luận trên từng phiên riêng rẽ chứ không chỉ trên số gộp; (3) muốn so sánh A với D-lab chặt chẽ hơn phải đo lại cả hai cấu hình trong cùng một phiên và cùng trạng thái volume — đây là việc còn lại, không phải kết quả đã có. Chi tiết từng lần chạy: `docs/evidence/T14_A_bo_sung_2026-11-11.md`.
 
 ![Hình 4. So sánh p95 và thông lượng giữa baseline A và D-lab; D-lab sụp ở 100 VUs do bão hòa pool](figures/fig_benchmark.png){width=100%}
 
-**H1 — overhead p95 ≤ 30% so với baseline: BỊ BÁC BỎ.** Ở hai mức tải đo được hợp lệ, overhead là **+122,21%** ở 10 VUs và **+124,91%** ở 50 VUs; mức 100 VUs không dùng để kết luận H1 vì D-lab sụp bão hòa (p95 xấp xỉ timeout 60 giây). Ngay ở mức tải thấp nhất, p95 tăng hơn gấp đôi, gấp khoảng 4 lần ngưỡng 30%. Đồng thời RPS giảm từ 238,90 xuống 106,87 ở 10 VUs và từ 169,14 xuống 110,55 ở 50 VUs. Nguyên nhân chính là mỗi request tạo gọi Vault `transit/datakey` để sinh DEK, mỗi request đọc gọi `transit/decrypt`; 70% tải là tạo. Vault, PostgreSQL và API dùng chung CPU của một máy; API chạy một Uvicorn worker với pool 5+10. Vì vậy không thể tuyên bố overhead chấp nhận được; cần cấu hình D' (sinh DEK theo lô/cache DEK cho bản ghi nóng, tăng pool, nhiều worker/replica, đặt Vault gần app) và đo lại trước khi dùng production. Cần phân biệt rõ đây là `D-lab` chưa có TLS; cấu hình `D` thật sẽ còn overhead TLS.
+**H1 — overhead p95 ≤ 30% so với baseline: BỊ BÁC BỎ.** Với A gộp 5 lần, overhead là **+122,21%** ở 10 VUs và **+131,21%** ở 50 VUs; mức 100 VUs không dùng để kết luận H1 vì D-lab sụp bão hòa (p95 xấp xỉ timeout 60 giây). Kết luận không đổi khi tách phiên: chỉ dùng A của phiên 31/10 thì +122,21% / +124,91%, chỉ dùng A của phiên 11/11 thì +121,06% / +184,89% — cả ba cách tính đều vượt xa ngưỡng 30%. Ngay ở mức tải thấp nhất, p95 tăng hơn gấp đôi, gấp khoảng 4 lần ngưỡng 30%. Đồng thời RPS giảm từ 238,90 xuống 106,87 ở 10 VUs và từ 193,73 xuống 110,55 ở 50 VUs. Nguyên nhân chính là mỗi request tạo gọi Vault `transit/datakey` để sinh DEK, mỗi request đọc gọi `transit/decrypt`; 70% tải là tạo. Vault, PostgreSQL và API dùng chung CPU của một máy; API chạy một Uvicorn worker với pool 5+10. Vì vậy không thể tuyên bố overhead chấp nhận được; cần cấu hình D' (sinh DEK theo lô/cache DEK cho bản ghi nóng, tăng pool, nhiều worker/replica, đặt Vault gần app) và đo lại trước khi dùng production. Cần phân biệt rõ đây là `D-lab` chưa có TLS; cấu hình `D` thật sẽ còn overhead TLS.
 
 **Quan sát bão hòa:** D-lab tăng từ 106,87 lên 110,55 RPS khi tải từ 10 lên 50 VUs, trong khi p95 tăng từ 123 ms lên 839 ms; nghĩa là hệ thống đã chạm trần khoảng 110 RPS. Ở 100 VUs, log API ghi `QueuePool limit of size 5 overflow 10 reached, connection timed out, timeout 30.00` và trả 503; p95 60 giây là timeout của k6, không phải thời gian xử lý thực. Đây là bằng chứng cho D-08 (pool 5+10, một worker, connection bị giữ trong lúc gọi Vault) và cho thấy H1 chỉ có thể xét ở 10/50 VUs.
 
@@ -417,7 +433,8 @@ Số của D-lab là **trung vị của 5 lần chạy** mỗi mức, lấy từ
 - Chưa đo CPU theo từng run; bảng CPU trong khung báo cáo được thay bằng mô tả môi trường và RPS/p95. Nếu cần CPU, chạy `docker stats` song song và ghi rõ thời điểm lấy mẫu.
 - Baseline dùng chung PostgreSQL nhưng bảng riêng, không gọi Vault; đây là so sánh "cùng DB, khác lớp mã hóa", không phải so sánh hai hệ thống độc lập.
 - Kết quả p95 ở 10 VUs cao hơn kỳ vọng do mỗi request phải chờ Vault + commit DB; đây là chi phí thật của kiến trúc, không phải lỗi đo.
-- Các ca T06/T08/T13 chưa đạt là bằng chứng trung thực cho thấy hệ thống chưa hoàn thiện; không được tag `v1.0.0` khi các defect này còn mở.
+- T13 chưa đạt (chưa TLS/mã hóa volume), D-05 và D-08 còn mở. Vì vậy bản nghiệm thu được gắn thẻ **`v0.9.0-rc1`** (release candidate), **không phải `v1.0.0`**: chỉ tag `v1.0.0` khi T13 đạt và D-05/D-08 được đóng hoặc được chấp nhận rủi ro bằng văn bản. Ghi nhận trung thực các ca chưa đạt là một phần của kết quả, không phải điều cần che giấu.
+- D-09 cho thấy một rủi ro quy trình: biên bản nghiệm thu có thể được ghi trên máy cá nhân trong khi mã đã commit không dựng lại được trên máy khác. Bài học là mọi ca "ĐẠT" phải kèm lệnh tái lập chạy được từ `main` sạch; lần tái kiểm chứng 11/11 (`down -v` rồi `up -d --build`) được thêm vào để đáp ứng yêu cầu đó.
 
 ## CHƯƠNG 5: QUẢN TRỊ RỦI RO, ỨNG PHÓ SỰ CỐ VÀ DỰ TOÁN CHI PHÍ
 
@@ -438,7 +455,8 @@ Số của D-lab là **trung vị của 5 lần chạy** mỗi mức, lấy từ
 - **Vault dev mode:** storage trong RAM, một nút, root token `root`, không có HA/backup. Mất container là mất khóa/audit.
 - **HTTP trong lab:** chưa có TLS; dữ liệu và API key có thể bị nghe lén trên mạng. Đây là lý do T13 chưa đạt.
 - **`vault_admin` SUPERUSER:** dùng để đơn giản hóa lab; production phải tách quyền và dùng role tối thiểu.
-- **D-01/D-02/D-03:** mã đã siết policy, SecretID và rewrap; đã có biên bản nghiệm thu chạy lệnh ngày 05/11/2026 (`docs/evidence/T06_T08_2026-11-05.md`).
+- **D-01/D-02/D-03:** mã đã siết policy, SecretID và rewrap; đã có biên bản nghiệm thu chạy lệnh ngày 05/11/2026 (`docs/evidence/T06_T08_2026-11-05.md`) và tái kiểm chứng độc lập ngày 11/11/2026 (`docs/evidence/T06_T08_T15_2026-11-11.md`).
+- **D-09 (đã đóng, để lại bài học):** lời gọi `generate_secret_id` truyền tham số cấp role khiến `vault-init` exit 1 và không tạo danh tính operator. Rủi ro còn lại là **quy trình**, không phải mã: một biên bản "ĐẠT" ghi trên máy cá nhân không đảm bảo mã đã commit tái lập được trên máy khác. Biện pháp giảm thiểu đã áp dụng: regression test chặn keyword không được hvac hỗ trợ, và biên bản 11/11 chạy từ `down -v` → `up -d --build`.
 - **Một worker:** cơ chế rotation trong bộ nhớ không scale ngang; cần thiết kế lại cho nhiều replica.
 - **Không có backup tự động:** chưa có snapshot Vault/DB định kỳ; cần bổ sung trước khi dùng thật.
 - **Baseline D-07:** baseline chỉ để đo, không phải hệ thống production; không được nhầm với ứng dụng.
@@ -465,16 +483,17 @@ Không đưa ra con số tuyệt đối vì bảng giá thay đổi theo nhà cu
 
 ### 1. Kết quả đạt được
 
-Đồ án đã xây dựng được một nguyên mẫu mã hóa phong bì có bằng chứng thực thi: dữ liệu nhạy cảm chỉ lưu dưới dạng ciphertext, DEK được Vault bọc, AAD chống tráo payload, API key/admin key tách biệt, audit ghi nhận truy cập, credential DB động có lease và thu hồi được, CI quét secret và ruleset chặn push trực tiếp. Các ca T01–T05, T07, T09–T12, T16 đạt theo biên bản 31/10. T06 và T08 đã được SV2 sửa và nghiệm thu đạt ngày 05/11/2026 (`T06_T08_2026-11-05.md`). T13 chưa đạt vì lab chưa có TLS.
+Đồ án đã xây dựng được một nguyên mẫu mã hóa phong bì có bằng chứng thực thi: dữ liệu nhạy cảm chỉ lưu dưới dạng ciphertext, DEK được Vault bọc, AAD chống tráo payload, API key/admin key tách biệt **và chỉ đọc từ môi trường (fail-fast, fail-closed)**, audit ghi nhận truy cập, credential DB động có lease và thu hồi được, CI quét secret và ruleset chặn push trực tiếp. Các ca T01–T05, T07, T09–T12, T16 đạt theo biên bản 31/10. T06 và T08 đã được SV2 sửa và nghiệm thu đạt ngày 05/11/2026 (`T06_T08_2026-11-05.md`), sau đó được SV3 **tái kiểm chứng độc lập ngày 11/11/2026** trên stack dựng lại sạch từ `main` (`T06_T08_T15_2026-11-11.md`). Lần tái lập này phát hiện và đóng defect D-09 (lỗi keyword khiến `vault-init` không hoàn tất). T13 chưa đạt vì lab chưa có TLS; D-05 và D-08 còn mở, nên bản nghiệm thu gắn thẻ `v0.9.0-rc1`.
 
 ### 2. Bài học
 
-Mã hóa chỉ có giá trị khi khóa và quyền giải mã được tách khỏi dữ liệu và khỏi ứng dụng. Một hệ thống có thể dùng AES-256-GCM nhưng vẫn mất an toàn nếu policy AppRole quá rộng, secret ID không hết hạn, hoặc audit không được giám sát. Ngược lại, một chút chi phí hiệu năng (gọi Vault, kiểm tra credential) là đánh đổi hợp lý để loại bỏ rủi ro lộ plaintext. Bài học thứ hai là phải đo và ghi lại cả thất bại: các defect D-01–D-08 và các ca chưa đạt là một phần của kết quả nghiên cứu, không phải điều cần che giấu.
+Mã hóa chỉ có giá trị khi khóa và quyền giải mã được tách khỏi dữ liệu và khỏi ứng dụng. Một hệ thống có thể dùng AES-256-GCM nhưng vẫn mất an toàn nếu policy AppRole quá rộng, secret ID không hết hạn, hoặc audit không được giám sát. Ngược lại, một chút chi phí hiệu năng (gọi Vault, kiểm tra credential) là đánh đổi hợp lý để loại bỏ rủi ro lộ plaintext. Bài học thứ hai là phải đo và ghi lại cả thất bại: các defect D-01–D-09 và các ca chưa đạt là một phần của kết quả nghiên cứu, không phải điều cần che giấu.
 
 ### 3. Hướng phát triển
 
 - Bổ sung TLS/mTLS, Vault file storage + HA, backup/unseal an toàn.
-- Chạy lại T06 và T08 trên stack đã dựng bằng policy mới, rồi lưu output vào `docs/evidence/`.
+- Đo lại E-lab trên stack đã có rewrap + `min_decryption_version` để chứng minh "xoay không gián đoạn" và "hoàn tất vòng đời khóa" trong cùng một lượt tải.
+- Đưa bước tái lập từ `main` sạch (`down -v` → `up -d --build` → smoke test) vào CI hoặc vào checklist bắt buộc trước khi ghi một ca là ĐẠT, để không lặp lại D-09.
 - Cache DEK có kiểm soát để giảm độ trễ, đo lại H1.
 - Chạy baseline và target trên máy tách biệt hoặc cùng cluster có giới hạn tài nguyên, đo CPU/RAM chính xác.
 - Tích hợp HSM/Confidential Computing, service mesh, và cảnh báo real-time thay vì script đọc audit.
@@ -492,6 +511,6 @@ Mã hóa chỉ có giá trị khi khóa và quyền giải mã được tách kh
 
 - **Phụ lục A:** `docker-compose.yml`, `api/scripts/setup_vault.py`, `api/app/services/encryption.py`, `api/app/database.py`.
 - **Phụ lục B:** `bench/results/*.csv.gz`, `*_summary.json`, bảng `analyze.py`.
-- **Phụ lục C:** `docs/evidence/*.md`, ảnh chụp và video demo.
+- **Phụ lục C:** `docs/evidence/*.md` (biên bản chạy lệnh T01–T16 và defect log), ảnh chụp ruleset/PR/push bị chặn, và `docs/demo/kich-ban-demo-truc-tiep.md` (kịch bản trình diễn trực tiếp 15–20 phút có phân công). Đồ án **không nộp video demo**; hình thức nghiệm thu là trình diễn trực tiếp. Ảnh chụp chỉ bổ trợ, không thay thế log và số liệu.
 - **Phụ lục D:** `docs/testing/test-plan.md` (T01–T16, H1–H4, defect log).
 
