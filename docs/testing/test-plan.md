@@ -75,23 +75,23 @@ Các lệnh `docker compose ...` chạy từ thư mục gốc repository. Nếu 
 
 ## 4. Ma trận kiểm thử
 
-| ID | Hạng mục | Mục tiêu | Kỳ vọng | Trạng thái (31/10/2026) |
+| ID | Hạng mục | Mục tiêu | Kỳ vọng | Trạng thái (cập nhật 11/11/2026) |
 |---|---|---|---|---|
 | T01 | Envelope encryption | Round-trip create/read | Giá trị đọc lại khớp; DB chỉ có ciphertext, nonce, encrypted DEK | ĐẠT |
 | T02 | Plaintext leakage | Không có plaintext trong DB/dump | 0 kết quả khi tìm chuỗi test | ĐẠT (4/4 vị trí = 0) |
 | T03 | Tamper detection | Sửa ciphertext bị phát hiện | HTTP 503, audit ghi failure | ĐẠT |
 | T04 | AAD binding | Hoán đổi ciphertext giữa 2 bản ghi bị phát hiện | HTTP 503 | ĐẠT |
 | T05 | API authentication | Thiếu/sai API key bị chặn | 401; key đúng 201 | ĐẠT (401/401/403) |
-| T06 | AppRole least privilege | App không rotate/export KEK | Checker PASS; rotate/export bị 403 | ĐÃ ĐẠT (05/11) — D-01 đóng |
+| T06 | AppRole least privilege | App không rotate/export KEK | Checker PASS; rotate/export bị 403 | ĐÃ ĐẠT (05/11; SV3 tái kiểm chứng 11/11) — D-01 đóng |
 | T07 | Audit | Ghi nhận Transit/Database | Audit log có `transit/decrypt`, `database/creds`; không có plaintext | ĐẠT |
-| T08 | KEK rotation + rewrap | Xoay KEK, rewrap, chặn version cũ | Rewrap sang version mới; `min_decryption_version` chặn v1 | ĐÃ ĐẠT (05/11) — D-03 đóng |
+| T08 | KEK rotation + rewrap | Xoay KEK, rewrap, chặn version cũ | Rewrap sang version mới; `min_decryption_version` chặn v1 | ĐÃ ĐẠT (05/11 đủ 7 bước; SV3 tái kiểm chứng 11/11) — D-03 đóng |
 | T09 | DB credential rotation | Xoay mật khẩu DB dưới tải | Lỗi < 0,1%; pool mới hoạt động | ĐẠT (20 VUs/1 phút + E-lab 50 VUs/3 phút) |
 | T10 | Lease lifecycle | Gia hạn/thu hồi lease | Credential bị thu hồi không đăng nhập được | ĐÃ ĐẠT (Lease 31/10; SecretID 05/11) — D-02 đóng |
 | T11 | Secret scanning | Gitleaks chặn secret | 0 finding trên repo; secret giả bị phát hiện | ĐẠT |
 | T12 | Branch protection | Chặn push trực tiếp/force push; bắt buộc PR + approval | GitHub từ chối; PR chỉ merge sau approval | ĐẠT một phần (API + ảnh) |
 | T13 | TLS / at rest | Bảo vệ trên đường truyền và ổ đĩa | TLS bật; BitLocker/volume encryption bật | CHƯA ĐẠT — thiếu TLS |
-| T14 | Benchmark | Đo p50/p95/p99, RPS, lỗi | Đủ 10/50/100 VUs, 5 lần; H1, H2 | ĐẠT MỘT PHẦN — A/D-lab/E-lab; H1 bác bỏ; thiếu B/C/D |
-| T15 | Cost / cleanup / reproducibility | Dựng lại và dọn sạch | Lệnh dựng lại chạy được; không còn tài nguyên | ĐẠT (nhánh `infra/fallback-compose`, 24 s, smoke 9/9) |
+| T14 | Benchmark | Đo p50/p95/p99, RPS, lỗi | Đủ 10/50/100 VUs, 5 lần; H1, H2 | ĐẠT MỘT PHẦN — A đủ 5 lần/mức (31/10 + 11/11), D-lab 5 lần, E-lab 3 lần; H1 bác bỏ; thiếu B/C/D |
+| T15 | Cost / cleanup / reproducibility | Dựng lại và dọn sạch | Lệnh dựng lại chạy được; không còn tài nguyên | ĐẠT (31/10: 24 s, smoke 9/9; 11/11: `down -v` → `up -d --build` từ `main`, `vault-init` exit 0, smoke 9/9 — đóng D-09) |
 | T16 | Anomaly alert | Cảnh báo giải mã bất thường | 200 decrypt/phút sinh cảnh báo; tải thường không báo | ĐẠT |
 
 ## 5. Chi tiết ca kiểm thử
@@ -583,8 +583,25 @@ docker run --rm -v "${PWD}:/work" -w /work python:3.12-slim `
 
 - H1 **bị bác bỏ**: overhead p95 +122,21% (10 VUs), +124,91% (50 VUs).
 - H2 **đạt**: 3/3 lần E-lab 0 lỗi; 6 thao tác xoay HTTP 200; 0 phản hồi 5xx.
-- Sai lệch so với quy trình: A và E-lab chạy 3 lần thay vì 5; không khởi động lại stack giữa D-lab và A (Vault dev mode mất KEK khi restart). Đã ghi trong bằng chứng.
+- Sai lệch so với quy trình: A và E-lab chạy 3 lần thay vì 5; không khởi động lại stack giữa D-lab và A (Vault dev mode mất KEK khi restart). Đã ghi trong bằng chứng. Riêng A đã được đo bổ sung đủ 5 lần/mức ngày 11/11 (xem khối dưới); E-lab vẫn 3 lần.
 - Thiếu B/C và D đầy đủ (TLS, volume encryption) nên T14 chỉ đạt một phần.
+
+**Bổ sung 11/11/2026 — A đủ 5 lần/mức (xem `docs/evidence/T14_A_bo_sung_2026-11-11.md`):**
+
+Đo thêm 2 lần mỗi mức 10/50/100 VUs (run4, run5) trên stack dựng lại sạch (`down -v` → `up -d`, `vault-init` exit 0), cùng image, cùng `mixed.js`/`server.py`, warm-up 1 phút, 3 phút/lần, 0,00% lỗi cả 6 lần.
+
+| Cấu hình | VUs | Số lần | RPS (trung vị) | p50 (ms) | p95 (ms) | p99 (ms) | Error |
+|---|---:|---:|---:|---:|---:|---:|---:|
+| A gộp (31/10 + 11/11) | 10 | 5 | 238,90 | 42,22 | 55,46 | 61,49 | 0,00% |
+| A gộp (31/10 + 11/11) | 50 | 5 | 193,73 | 257,56 | 362,74 | 424,93 | 0,00% |
+| A gộp (31/10 + 11/11) | 100 | 5 | 164,02 | 608,71 | 699,55 | 770,39 | 0,00% |
+| A chỉ phiên 11/11 | 10 | 2 | 238,40 | 42,23 | 55,75 | 62,46 | 0,00% |
+| A chỉ phiên 11/11 | 50 | 2 | 237,33 | 207,42 | 294,38 | 361,75 | 0,00% |
+| A chỉ phiên 11/11 | 100 | 2 | 275,64 | 357,63 | 426,20 | 473,52 | 0,00% |
+
+- H1 vẫn **bị bác bỏ** với A gộp: +122,21% (10 VUs), +131,21% (50 VUs). Tách phiên: 31/10 cho +122,21% / +124,91%; 11/11 cho +121,06% / +184,89%. Không cách tính nào đạt ngưỡng ≤ 30%.
+- **Giới hạn hiệu lực:** hai phiên A khác nhau về thủ tục (31/10 chạy sau D-lab trên volume đã có dữ liệu, không restart stack; 11/11 chạy trên volume sạch sau `down -v`). Ở 50/100 VUs phiên 11/11 nhanh hơn hẳn (RPS 237,33 và 275,64 so với 169,14 và 163,61). Nguyên nhân chưa được kiểm chứng; không loại trừ trạng thái máy. Số gộp chỉ để đáp ứng yêu cầu ≥ 5 lần, không phải một phép đo đồng nhất.
+- Việc còn lại để T14 đạt đầy đủ: đo B/C (chờ TLS + volume encryption của SV1), đo D đầy đủ, đo lại A và D-lab trong cùng một phiên, và đo E-lab đủ 5 lần sau khi có rewrap.
 
 **Bằng chứng:** CSV thô, bảng Markdown do `analyze.py` xuất, ảnh summary k6, ảnh thời điểm rotation, mô tả máy.
 
@@ -680,6 +697,7 @@ docker run --rm -v "${PWD}:/work" -w /work python:3.12-slim `
 | D-06 | Thấp | `.vscode/settings.json` còn tracked; `.gitignore` từng bỏ qua CSV benchmark | repo | SV2/SV3 | `.vscode/` đã đưa vào `.gitignore` và bỏ khỏi index — Đóng |
 | D-07 | Trung bình | Chưa có cấu hình baseline plaintext (A) cho H1 | `bench/baseline/server.py` | SV2/SV3 | Đã có baseline, giữ tách khỏi app |
 | D-08 | Trung bình | Pool 5+10, một Uvicorn worker; connection bị giữ trong lúc gọi Vault | `api/app/database.py` | SV2/SV3 | Mở; đã ghi trong mục 4.4 |
+| D-09 | Cao | `generate_secret_id` bị truyền `secret_id_ttl`/`secret_id_num_uses` (hai tham số cấp role, hvac 2.4.0 không nhận) ở `setup_vault.py:157` và `issue_workload_secret.py:19` → `vault-init` exit 1, không tạo role operator, không dựng được stack từ mã đã commit | `docs/evidence/T06_T08_T15_2026-11-11.md` mục 1 | SV3 | Đã sửa (bỏ keyword thừa, giữ TTL ở cấp role) + regression test `api/tests/test_approle_secret_id_calls.py`; suite 11/11 pass; `vault-init` exit 0, smoke 9/9 (11/11) — Đóng |
 
 ## 7. Điều kiện nghiệm thu
 
@@ -693,15 +711,24 @@ Chỉ tag `v1.0.0` khi:
 - Ruleset yêu cầu `gitleaks` và 1 approval; push trực tiếp bị chặn.
 - Báo cáo có bảng kết quả, ảnh bằng chứng, phần rủi ro còn lại và kế hoạch mất khóa.
 
+**Trạng thái đối chiếu ngày 11/11/2026:** T06 và T08 đã ĐẠT (SV2 nghiệm thu 05/11, SV3 tái kiểm chứng độc lập 11/11 trên stack dựng lại từ `main`). **T13 vẫn CHƯA ĐẠT**, D-05 và D-08 còn mở, B/C chưa đo. Vì vậy bản nghiệm thu gắn thẻ **`v0.9.0-rc1`** (release candidate), **không phải `v1.0.0`**.
+
+**Điều kiện bổ sung rút ra từ D-09:** một ca chỉ được ghi "ĐẠT" khi có lệnh tái lập chạy được từ `main` sạch (`docker compose down -v` → `up -d --build` → `vault-init` exit 0). Biên bản ghi trên máy cá nhân mà mã đã commit không dựng lại được thì chưa đủ điều kiện nghiệm thu.
+
 ## 8. Lịch thực thi đề xuất
 
-| Ngày | Việc chính | Người |
-|---|---|---|
-| 31/10 | Chốt test plan, CI, stack dự phòng; chạy T01–T07 | SV3 |
-| 01/11 | SV2 sửa D-01/D-02/D-03; SV1 bàn giao TLS hoặc chốt phương án dự phòng | SV2, SV1 |
-| 02/11 | Chạy T08–T10; đo T14 lần đầu | SV3, SV2 |
-| 03/11 | T16, đo lại T14 sau tối ưu; thu bằng chứng | SV3 |
-| 04/11 | Viết Chương 3–4; rà soát số liệu | SV3 |
-| 05/11 | Quay video 8–12 phút; kiểm tra T13/T15 | Cả nhóm |
-| 06/11 | Đóng băng, tag `v1.0.0`, nộp | Cả nhóm |
-| 07/11 | Dự phòng | Cả nhóm |
+Lịch gốc dưới đây được giữ làm hồ sơ. **Thay đổi đã chốt:** bỏ quay video, chuyển sang **trình diễn trực tiếp 15–20 phút** trước giảng viên (đề bài cho phép một trong hai hình thức). Kịch bản và phân công: `docs/demo/kich-ban-demo-truc-tiep.md`.
+
+| Ngày | Việc chính | Người | Trạng thái |
+|---|---|---|---|
+| 31/10 | Chốt test plan, CI, stack dự phòng; chạy T01–T07 | SV3 | Đã xong |
+| 01/11 | SV2 sửa D-01/D-02/D-03; SV1 bàn giao TLS hoặc chốt phương án dự phòng | SV2, SV1 | SV2 xong 05/11; SV1 **chưa** bàn giao TLS |
+| 02/11 | Chạy T08–T10; đo T14 lần đầu | SV3, SV2 | Đã xong (T08 nghiệm thu 05/11) |
+| 03/11 | T16, đo lại T14 sau tối ưu; thu bằng chứng | SV3 | T16 xong; D-08 chưa sửa nên chưa đo D' |
+| 04/11 | Viết Chương 3–4; rà soát số liệu | SV3 | Đã xong |
+| 05/11 | ~~Quay video 8–12 phút~~ → viết kịch bản demo trực tiếp; kiểm tra T13/T15 | Cả nhóm | Kịch bản demo: xong 11/11; T13 vẫn chưa đạt |
+| 06/11 | ~~Đóng băng, tag `v1.0.0`~~ → đóng băng code, tag **`v0.9.0-rc1`** | Cả nhóm | Tag `v0.9.0-rc1` cho bản nghiệm thu ứng viên |
+| 07/11 | Dự phòng | Cả nhóm | — |
+| 11/11 | Tái lập stack từ `main`, tái kiểm chứng T06/T08/T15, sửa D-09, đo bổ sung cấu hình A | SV3 | Đã xong |
+
+**Việc còn lại trước buổi demo:** SV1 bàn giao TLS (T13) hoặc chuẩn bị cảnh "vì sao chưa đạt" theo mục 4 phương án B của kịch bản; SV2 đóng D-08 để đo cấu hình D'; cả nhóm rehearsal 2 lần có bấm giờ và điền nhật ký ở mục 8 của kịch bản demo.

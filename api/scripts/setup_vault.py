@@ -146,18 +146,12 @@ def _write_secret_file(path: Path, role_id: str, secret_id: str) -> None:
         pass
 
 
-def _issue_secret(
-    client: hvac.Client,
-    role_name: str,
-    *,
-    secret_id_ttl: str,
-    secret_id_num_uses: int,
-) -> tuple[str, str]:
+def _issue_secret(client: hvac.Client, role_name: str) -> tuple[str, str]:
+    # secret_id_ttl / secret_id_num_uses are role-level properties, already set by
+    # create_or_update_approle(). The secret-id endpoint does not accept them.
     role_id = client.auth.approle.read_role_id(role_name=role_name, mount_point="approle")["data"]["role_id"]
     secret = client.auth.approle.generate_secret_id(
         role_name=role_name,
-        secret_id_ttl=secret_id_ttl,
-        secret_id_num_uses=secret_id_num_uses,
         mount_point="approle",
     )["data"]["secret_id"]
     return role_id, secret
@@ -188,12 +182,7 @@ def configure_approle(client: hvac.Client) -> None:
         bind_secret_id=True,
         mount_point="approle",
     )
-    role_id, secret_id = _issue_secret(
-        client,
-        APPROLE_NAME,
-        secret_id_ttl=APP_SECRET_ID_TTL,
-        secret_id_num_uses=APP_SECRET_ID_NUM_USES,
-    )
+    role_id, secret_id = _issue_secret(client, APPROLE_NAME)
     _write_secret_file(APPROLE_OUTPUT_FILE, role_id, secret_id)
     print(
         f"Wrote workload AppRole to {APPROLE_OUTPUT_FILE} "
@@ -210,12 +199,7 @@ def configure_approle(client: hvac.Client) -> None:
         bind_secret_id=True,
         mount_point="approle",
     )
-    operator_role_id, operator_secret_id = _issue_secret(
-        client,
-        OPERATOR_NAME,
-        secret_id_ttl=OPERATOR_SECRET_ID_TTL,
-        secret_id_num_uses=OPERATOR_SECRET_ID_NUM_USES,
-    )
+    operator_role_id, operator_secret_id = _issue_secret(client, OPERATOR_NAME)
     _write_secret_file(OPERATOR_OUTPUT_FILE, operator_role_id, operator_secret_id)
     print(
         f"Wrote operator AppRole to {OPERATOR_OUTPUT_FILE}. "
