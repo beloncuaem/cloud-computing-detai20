@@ -2,7 +2,7 @@
 
 **Thời lượng:** 15–20 phút (mục tiêu 18 phút, chừa 2 phút dự phòng)
 **Hình thức:** trình diễn trực tiếp trước giảng viên, **không dùng video**. Đề bài cho phép "Video demo 8–12 phút **hoặc** trình diễn trực tiếp 15–20 phút, có kịch bản và phân công rõ"; nhóm chọn phương án trực tiếp.
-**Phiên bản áp dụng:** `main` sau PR #9, thẻ nghiệm thu `v0.9.0-rc1`.
+**Phiên bản áp dụng:** `main` sau PR #10 (`c69d124`), thẻ nghiệm thu `v0.9.0-rc1`. Lịch demo đã đổi so với kế hoạch 11/11; ngày mới chưa chốt — rehearsal kỹ thuật chạy 14/11/2026 (mục 8.1).
 **Nguyên tắc:** mỗi người dẫn phần của mình, chạy lệnh thật trên máy thật, và **tự trả lời được quyết định kỹ thuật** trong phần phản biện. Ảnh chụp chỉ bổ trợ; log và số liệu mới là bằng chứng.
 
 ## 1. Phân công
@@ -62,9 +62,9 @@ docker compose exec -T vault vault read -field=min_decryption_version transit/ke
 | 5–7 | **Tình huống lỗi 1:** sửa 1 byte ciphertext → từ chối; tráo payload giữa 2 bản ghi (AAD) → từ chối | SV2 | T03 rồi T04 | HTTP **503**; audit `record.read` / `failure` / `decrypt_failed` |
 | 7–9 | **Least privilege + tách nhiệm vụ:** ma trận quyền AppRole, rồi thử xoay KEK bằng danh tính ứng dụng | SV2 | T06: `check_approle_privileges.py`, `prove_rotate_forbidden.py`, `POST /admin/rotation/transit-key` | 9/9 `PASS` exit 0; rotate → **403** |
 | 9–12 | **Vòng đời khóa (trọng tâm đề tài):** xoay KEK → đọc lại bản ghi cũ → rewrap DEK → đặt `min_decryption_version` → ciphertext version cũ bị chặn | SV2 dẫn lệnh, SV3 giải thích vì sao thứ tự này | T08 đủ 7 bước | `kek_version` 1→2; prefix `vault:v1:`→`vault:v2:`; v1 bị **400**; bản ghi đã rewrap vẫn 200 |
-| 12–14 | **Tình huống lỗi 2:** thu hồi lease credential DB → credential chết ngay; SecretID dùng lại bị từ chối | SV3 | T10 + `prove_secret_id_reuse.py` | trước revoke: `SELECT current_user` OK; sau revoke: `password authentication failed`; reuse → `PASS` |
+| 12–14 | **Tình huống lỗi 2:** thu hồi lease credential DB → credential chết ngay; SecretID dùng lại bị từ chối | SV3 | T10 + `prove_secret_id_reuse.py` | trước revoke: `SELECT current_user` OK; sau revoke: `FATAL: role ... does not exist` (hoặc `password authentication failed`, tùy bản ghi lease); reuse → `PASS` |
 | 14–16 | **TLS và at rest** — xem mục 4 bên dưới (hai phương án tùy SV1 có bàn giao hay không) | SV1 | `curl.exe -k https://...` / `SHOW ssl;` **hoặc** cảnh "vì sao chưa đạt" | xem mục 4 |
-| 16–18 | Số liệu: bảng p50/p95/p99 A vs D-lab, **H1 bị bác bỏ**, trần ~110 RPS, sụp ở 100 VUs, H2 đạt | SV3 | `python bench/analyze.py "bench/results/*.csv.gz"`; mở Hình 4 | overhead +122,21% / +124,91%; D-lab 100 VUs lỗi ~50% |
+| 16–18 | Số liệu: bảng p50/p95/p99 A vs D-lab, **H1 bị bác bỏ**, trần ~110 RPS, sụp ở 100 VUs, H2 đạt | SV3 | `python bench/analyze.py "bench/results/*.csv.gz"`; mở Hình 4 | overhead +122,21% / +131,21% (gộp 5 lần/mức); D-lab 100 VUs lỗi tối đa ≈61% |
 | 18–20 | DevSecOps và kết luận: CI chặn secret, ruleset chặn push thẳng, defect công khai D-05/D-08/T13, thẻ `v0.9.0-rc1`, hướng hoàn thiện | SV3 | `git log --oneline --graph -15`; `git shortlog -sne --all`; ảnh ruleset | 2 job CI xanh; 3 tác giả; tag `v0.9.0-rc1` |
 
 Tổng: 20 phút. Nếu cần rút còn 15 phút: bỏ cảnh T04 (phút 5–7 chỉ giữ T03), rút T02 còn 2 vị trí (bảng + `pg_dump`), và gộp phút 18–20 vào 16–18.
@@ -258,7 +258,7 @@ git tag --list
 
 Điểm phải nói ra, không né:
 
-- **H1 bị bác bỏ:** overhead p95 **+122,21%** ở 10 VUs và **+124,91%** ở 50 VUs, ngưỡng đề ra là ≤30%. Nguyên nhân: mỗi request tạo gọi `transit/datakey`, mỗi request đọc gọi `transit/decrypt`; 70% tải là tạo; API một Uvicorn worker, pool 5+10.
+- **H1 bị bác bỏ:** overhead p95 **+122,21%** ở 10 VUs và **+131,21%** ở 50 VUs (gộp 5 lần/mức sau bổ sung 11/11; riêng phiên 31/10 là +124,91%), ngưỡng đề ra là ≤30%. Nguyên nhân: mỗi request tạo gọi `transit/datakey`, mỗi request đọc gọi `transit/decrypt`; 70% tải là tạo; API một Uvicorn worker, pool 5+10.
 - **Trần ~110 RPS:** D-lab chỉ tăng 106,87 → 110,55 RPS khi tải 10 → 50 VUs nhưng p95 tăng 123 → 839 ms. Ở 100 VUs log ghi `QueuePool limit of size 5 overflow 10 reached` và p95 xấp xỉ timeout 60 s của k6 → **sụp bão hòa**, không dùng để tính H1.
 - **H2 đạt:** T09 0% lỗi ở 20 VUs/1 phút; E-lab 3 lần 50 VUs/3 phút, 6 thao tác xoay đều HTTP 200, 0,00% lỗi.
 - **`D-lab` không phải `D`:** chưa có TLS nên đây là **cận dưới** của chi phí mã hóa. Cấu hình B/C chưa đo vì chờ T13.
@@ -298,3 +298,24 @@ Báo cáo ước tính chi phí lab = 0 (máy cá nhân, image mã nguồn mở)
 | 2 | | | | | |
 
 Quy tắc: rehearsal 1 bấm giờ toàn bộ; rehearsal 2 chạy đúng thứ tự và **cố tình gây một lỗi** (tắt Vault giữa chừng) để tập phương án dự phòng. Nếu tổng thời gian vượt 20 phút, cắt theo hướng dẫn ở cuối mục 3.
+
+### 8.1. Dry-run kỹ thuật 14/11/2026 (SV3, chạy thật từng cảnh, chưa bấm giờ người)
+
+Chạy thật toàn bộ lệnh mục 5.1–5.7 trên stack dựng sạch (`down -v` → `up -d --build`, `vault-init` exit 0, KEK bắt đầu v1/min1) bằng một script PowerShell chạy Bypass phạm vi tiến trình. Tổng thời gian lệnh **54,9s** (không gồm thời gian dẫn/giải thích của người). Kết quả từng cảnh:
+
+| Cảnh | Thời gian | Kết quả quan sát | Đạt kỳ vọng |
+|---|---:|---|---|
+| 5.1 luồng bình thường | 0,5s | POST 201 / GET 200; `ct_bytes=26`, `nonce_bytes=12`, `dek_prefix=vault:v1:`, `kek_version=1` | Có |
+| 5.2 T02 probe | 2,2s | bảng=0, pg_dump=0, app/tmp=rỗng, image=rỗng | Có |
+| 5.3 T03+T04 | 0,7s | cả hai trả **503** | Có |
+| 5.4 T06 | 1,6s | checker PASS exit 0; `prove_rotate_forbidden` PASS; admin rotate **403** | Có |
+| 5.5 T08 7 bước | 5,2s | kek 1→2; đọc bản ghi cũ OK; rewrap 5/5; min=2; ciphertext v1 bị chặn; bản ghi rewrap đọc OK | Có |
+| 5.6 T10 | 2,5s | lease `duration=3600`; trước revoke `current_user` OK; sau revoke `FATAL: role ... does not exist`; reuse SecretID PASS | Có |
+| 5.7 số liệu + git | 41,9s | overhead +122,21%/+131,21%; 3 email tác giả; tag `v0.9.0-rc1`; HEAD `c69d124` | Có |
+
+Hai hiệu chỉnh rút ra từ dry-run (đã sửa trong kịch bản này):
+
+1. Overhead 50 VUs phải đọc **+131,21%** (gộp 5 lần/mức sau bổ sung 11/11), không phải +124,91% (con số riêng phiên 31/10). Lỗi tối đa D-lab 100 VUs là **≈61%**, không phải ~50%.
+2. Sau `vault lease revoke`, thông điệp thật trên PostgreSQL bản hiện tại là `FATAL: role ... does not exist` (role động bị xóa), không nhất thiết `password authentication failed`; kịch bản và test-plan chấp nhận cả hai.
+
+Việc còn lại trước demo: hai lần rehearsal **bấm giờ có người dẫn** (bảng mục 8) và chốt ngày demo mới; dry-run này chỉ chứng minh lệnh chạy đúng, không thay thế rehearsal người.
