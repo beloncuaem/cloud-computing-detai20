@@ -9,11 +9,12 @@ x-app-build: &app-build
   dockerfile: Dockerfile
 
 x-app-environment: &app-environment
-  DATABASE_URL: "postgresql+psycopg://app_user:local_app_password@postgres:5432/encryption_db"
+  DATABASE_URL: "postgresql+psycopg://app_user:local_app_password@postgres:5432/encryption_db?sslmode=require"
   USE_VAULT_DB_CREDS: "${USE_VAULT_DB_CREDS:-false}"
   DB_HOST: "postgres"
   DB_PORT: "5432"
   DB_NAME: "encryption_db"
+  DB_SSLMODE: "require"
   DB_ROTATION_INTERVAL_SECONDS: "1800"
   DB_POOL_SIZE: "${DB_POOL_SIZE:-20}"
   DB_MAX_OVERFLOW: "${DB_MAX_OVERFLOW:-20}"
@@ -45,13 +46,26 @@ x-init-environment: &init-environment
 services:
   postgres:
     image: postgres:16-alpine
-    command: ["postgres", "-c", "max_connections=200"]
+    command:
+      - "postgres"
+      - "-c"
+      - "max_connections=200"
+      - "-c"
+      - "ssl=on"
+      - "-c"
+      - "ssl_cert_file=/pgcerts/postgres.crt"
+      - "-c"
+      - "ssl_key_file=/pgcerts/postgres.key"
+    depends_on:
+      pgcerts:
+        condition: service_completed_successfully
     environment:
       POSTGRES_DB: "encryption_db"
       POSTGRES_USER: "postgres"
       POSTGRES_PASSWORD: "local_demo_postgres_password"
     volumes:
       - pgdata:/var/lib/postgresql/data
+      - pgcerts:/pgcerts:ro
       - ./api/sql:/docker-entrypoint-initdb.d:ro
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U postgres -d encryption_db"]
@@ -136,7 +150,36 @@ services:
       start_period: 20s
     restart: unless-stopped
 
+  # Chép cert vào named volume với quyền 600 cho uid postgres (70).
+  # Bind mount từ Windows không giữ được permission mà PostgreSQL đòi hỏi.
+  pgcerts:
+    image: alpine:3.20
+    volumes:
+      - ./infrastructure/certs/out:/src:ro
+      - pgcerts:/dst
+    command:
+      - "sh"
+      - "-c"
+      - "cp /src/postgres.crt /src/postgres.key /dst/ && chmod 600 /dst/postgres.key && chown 70:70 /dst/postgres.key && chmod 644 /dst/postgres.crt"
+    restart: "no"
+
+  # TLS terminator cho T13: Vault 8200, API 8443, baseline 8444.
+  nginx:
+    image: nginx:1.27-alpine
+    depends_on:
+      api:
+        condition: service_healthy
+    ports:
+      - "8200:8200"
+      - "8443:8443"
+      - "8444:8444"
+    volumes:
+      - ./infrastructure/nginx/conf.d:/etc/nginx/conf.d:ro
+      - ./infrastructure/certs/out:/etc/nginx/certs:ro
+    restart: unless-stopped
+
 volumes:
   pgdata:
+  pgcerts:
   approle:
   operator:

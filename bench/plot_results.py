@@ -5,9 +5,9 @@ Usage:
     pip install matplotlib
     python bench/plot_results.py
 
-Reads bench/results/{A,D-lab,E-lab}_*_summary.json and writes:
-    docs/report/figures/fig_benchmark.png
-    docs/report/figures/fig_rotation.png
+Reads bench/results/*_summary.json and writes:
+    docs/report/figures/fig_benchmark.png  (B/D/D'/E over TLS, 16/11)
+    docs/report/figures/fig_rotation.png   (historical E-lab, 31/10)
 The script deliberately uses the same medians as bench/analyze.py.
 """
 
@@ -26,13 +26,21 @@ import matplotlib.pyplot as plt
 ROOT = Path(__file__).resolve().parent.parent
 RESULTS = ROOT / "bench" / "results"
 OUT = ROOT / "docs" / "report" / "figures"
-CONFIGS = ("A", "D-lab")
+CONFIGS = ("B", "D", "Dprime", "E")
 VUS_LEVELS = (10, 50, 100)
-COLORS = {"A": "#4C78A8", "D-lab": "#E45756", "E-lab": "#54A24B"}
+SAT_P95_MS = 50000.0
+COLORS = {
+    "A": "#4C78A8", "D-lab": "#E45756", "E-lab": "#54A24B",
+    "B": "#4C78A8", "D": "#E45756", "Dprime": "#F58518", "E": "#54A24B",
+}
 LABELS = {
     "A": "A — baseline plaintext",
     "D-lab": "D-lab — envelope + Vault (HTTP)",
     "E-lab": "E-lab — xoay vòng (HTTP)",
+    "B": "B — baseline plaintext (TLS)",
+    "D": "D — envelope (TLS)",
+    "Dprime": "D' — envelope + cache DEK (TLS)",
+    "E": "E — envelope + xoay vòng (TLS)",
 }
 
 
@@ -67,10 +75,17 @@ def median(runs: list[dict[str, float]], key: str) -> float:
 def plot_benchmark(runs: dict[tuple[str, int], list[dict[str, float]]]) -> None:
     fig, (ax_lat, ax_rps) = plt.subplots(1, 2, figsize=(11, 4.2))
 
-    latency_levels = (10, 50)
+    latency_levels = VUS_LEVELS
     for config in CONFIGS:
-        xs = [index for index, vus in enumerate(latency_levels) if (config, vus) in runs]
-        p95 = [median(runs[(config, latency_levels[index])], "p95") for index in xs]
+        xs, p95 = [], []
+        for index, vus in enumerate(latency_levels):
+            if (config, vus) not in runs:
+                continue
+            value = median(runs[(config, vus)], "p95")
+            if value >= SAT_P95_MS:  # saturated level: hide so curves stay readable
+                continue
+            xs.append(index)
+            p95.append(value)
         all_xs = [index for index, vus in enumerate(VUS_LEVELS) if (config, vus) in runs]
         rps = [median(runs[(config, VUS_LEVELS[index])], "rps") for index in all_xs]
         ax_lat.plot(xs, p95, "o-", color=COLORS[config], label=LABELS[config], linewidth=2)
@@ -82,7 +97,7 @@ def plot_benchmark(runs: dict[tuple[str, int], list[dict[str, float]]]) -> None:
     ax_lat.set_xticklabels([str(v) for v in latency_levels])
     ax_lat.set_xlabel("Số virtual users")
     ax_lat.set_ylabel("p95 (ms)")
-    ax_lat.set_title("Độ trễ p95 (trung vị; 100 VUs D-lab sụp, xem bảng)")
+    ax_lat.set_title("Độ trễ p95 (trung vị; mức bão hòa bị ẩn)")
     ax_lat.grid(True, alpha=0.25)
     ax_lat.legend(fontsize=8)
 
@@ -94,7 +109,7 @@ def plot_benchmark(runs: dict[tuple[str, int], list[dict[str, float]]]) -> None:
     ax_rps.grid(True, alpha=0.25)
     ax_rps.legend(fontsize=8)
 
-    fig.suptitle("So sánh baseline A và D-lab (D-lab: 31/10; A: 31/10 + 11/11, xem mục 4.4)", fontsize=12)
+    fig.suptitle("Bốn cấu hình qua TLS (16/11/2026): B / D / D' / E", fontsize=12)
     fig.tight_layout()
     fig.savefig(OUT / "fig_benchmark.png", dpi=200, bbox_inches="tight")
     plt.close(fig)

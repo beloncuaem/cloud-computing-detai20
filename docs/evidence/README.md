@@ -35,6 +35,8 @@
 | `smoke_ps1_execution_policy_2026-11-14.md` | Chạy thật `smoke-test.ps1` bằng Bypass phạm vi tiến trình (9/9, hai chế độ credential); nguyên nhân gốc policy Restricted + chứng minh không nới policy; khôi phục `USE_VAULT_DB_CREDS=true`; mục lục 9 ảnh thật 14/11 | 14/11/2026 | Hợp lệ (SV3) |
 | `D05_D08_2026-11-15.md` | D-05: `vault_admin` bỏ SUPERUSER (`NOSUPERUSER NOCREATEDB CREATEROLE NOINHERIT`), không đọc trực tiếp dữ liệu; D-08: pool 20+20, 2 worker, connection tách khỏi Vault call, DEK cache sẵn sàng cho D'; lệnh kiểm tra quyền và đối chiếu mã | 15/11/2026 | Hợp lệ (SV3 kiểm tra mã) |
 
+| `T13_2026-11-16.md` | T13: TLS thật qua nginx (8200/8443/8444, TLS1.2+1.3, PG ssl=on, pg_stat_ssl TLSv1.3); at-rest cấp volume risk-accepted vì BitLocker Off (probe UAC); secret không trong image; envelope qua TLS; D-05 t/f/f trên volume mới | 16/11/2026 | Hợp lệ (SV3) |
+
 ## Ghi chú
 
 - Từ 11/11/2026, `API_KEY` và `ADMIN_API_KEY` không còn giá trị mặc định trong mã nguồn: API từ chối khởi động nếu biến môi trường trống (xem `.env.example` và `api/.env.example`). Các lệnh ghi trong những biên bản ở thư mục này vẫn dùng key demo `local-demo-api-key-change-me`; giữ nguyên vì đó là dữ liệu đã đo thật, không viết lại lịch sử nghiệm thu. Key lab đã được xoay và giá trị hiện tại chỉ nằm trong file `.env` (không commit).

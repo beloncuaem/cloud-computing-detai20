@@ -22,6 +22,8 @@ class Settings:
     db_host: str = os.getenv("DB_HOST", "localhost")
     db_port: int = int(os.getenv("DB_PORT", "5432"))
     db_name: str = os.getenv("DB_NAME", "encryption_db")
+    # "require" bật TLS phía client khi PostgreSQL chạy ssl=on (T13).
+    db_sslmode: str = os.getenv("DB_SSLMODE", "disable")
     db_rotation_interval_seconds: int = max(
         60, int(os.getenv("DB_ROTATION_INTERVAL_SECONDS", "1800"))
     )
