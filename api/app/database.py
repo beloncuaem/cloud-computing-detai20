@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import logging
 import threading
+from contextlib import contextmanager
 from typing import Generator
 
 from sqlalchemy import URL, create_engine, text
@@ -35,12 +36,7 @@ class DatabaseManager:
             if settings.use_vault_db_creds:
                 engine, lease_id, lease_duration = self._create_engine_from_vault()
             else:
-                engine = create_engine(
-                    settings.database_url,
-                    pool_pre_ping=True,
-                    pool_size=5,
-                    max_overflow=10,
-                )
+                engine = create_engine(settings.database_url, **self._pool_options())
                 with engine.connect() as connection:
                     connection.execute(text("SELECT 1"))
                 lease_id, lease_duration = None, None
@@ -51,6 +47,13 @@ class DatabaseManager:
             self._lease_id = lease_id
             self._lease_duration = lease_duration
         logger.info("Database connection initialized (Vault dynamic credentials=%s)", settings.use_vault_db_creds)
+
+    def _pool_options(self) -> dict[str, int | bool]:
+        return {
+            "pool_pre_ping": True,
+            "pool_size": settings.db_pool_size,
+            "max_overflow": settings.db_max_overflow,
+        }
 
     def _create_engine_from_vault(self) -> tuple[Engine, str | None, int | None]:
         client = get_vault_client()
@@ -69,10 +72,8 @@ class DatabaseManager:
         )
         engine = create_engine(
             url,
-            pool_pre_ping=True,
-            pool_size=5,
-            max_overflow=10,
             pool_recycle=max(60, int(response.get("lease_duration") or 3600) - 120),
+            **self._pool_options(),
         )
         try:
             with engine.connect() as connection:
@@ -102,8 +103,8 @@ class DatabaseManager:
 
         The previous lease is deliberately not revoked immediately. It remains valid
         during the overlap window so in-flight requests using the previous pool can
-        finish; Vault revokes it when its lease expires. This demo runs one Uvicorn
-        worker because an in-memory engine swap is process-local.
+        finish; Vault revokes it when its lease expires. The engine swap is
+        process-local: each Uvicorn worker rotates only its own pool.
         """
         if not settings.use_vault_db_creds:
             raise RuntimeError("Database credential rotation requires USE_VAULT_DB_CREDS=true")
@@ -138,6 +139,16 @@ class DatabaseManager:
 
 
 manager = DatabaseManager()
+
+
+@contextmanager
+def session_scope() -> Generator[Session, None, None]:
+    """Checkout a connection only for the database work inside the block."""
+    session = manager.new_session()
+    try:
+        yield session
+    finally:
+        session.close()
 
 
 def get_db() -> Generator[Session, None, None]:

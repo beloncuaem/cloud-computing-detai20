@@ -4,7 +4,10 @@ from __future__ import annotations
 import base64
 import os
 import re
+import threading
+import time
 import uuid
+from collections import OrderedDict
 from dataclasses import dataclass
 
 import hvac
@@ -13,6 +16,57 @@ from cryptography.hazmat.primitives.ciphers.aead import AESGCM
 from app.config import settings
 
 _VERSION_RE = re.compile(r"^vault:v(\d+):")
+
+
+class DekCache:
+    """Short-lived unwrapped DEKs, keyed by KEK name and wrapped ciphertext.
+
+    Disabled when DEK_CACHE_TTL_SECONDS is 0 (the default). Enabling it is
+    configuration D'. A hit does not call Vault, so min_decryption_version
+    is not enforced again until the entry expires or the process restarts.
+    """
+
+    def __init__(self) -> None:
+        self._lock = threading.Lock()
+        self._items: OrderedDict[str, tuple[float, bytes]] = OrderedDict()
+
+    def get(self, key: str) -> bytes | None:
+        ttl = settings.dek_cache_ttl_seconds
+        if ttl <= 0:
+            return None
+        now = time.monotonic()
+        with self._lock:
+            item = self._items.get(key)
+            if item is None:
+                return None
+            expires_at, dek = item
+            if expires_at <= now:
+                del self._items[key]
+                return None
+            self._items.move_to_end(key)
+            return dek
+
+    def put(self, key: str, dek: bytes) -> None:
+        ttl = settings.dek_cache_ttl_seconds
+        if ttl <= 0:
+            return
+        now = time.monotonic()
+        with self._lock:
+            self._items[key] = (now + ttl, dek)
+            self._items.move_to_end(key)
+            while len(self._items) > settings.dek_cache_max_entries:
+                self._items.popitem(last=False)
+
+    def clear(self) -> None:
+        with self._lock:
+            self._items.clear()
+
+
+dek_cache = DekCache()
+
+
+def _cache_key(kek_name: str, encrypted_dek: str) -> str:
+    return f"{kek_name}\n{encrypted_dek}"
 
 
 @dataclass(frozen=True)
@@ -92,6 +146,24 @@ def encrypt_sensitive_value(
     )
 
 
+def unwrap_dek(client: hvac.Client, *, encrypted_dek: str, kek_name: str) -> bytes:
+    """Return the 32-byte DEK, using the in-process cache when it is enabled."""
+    key = _cache_key(kek_name, encrypted_dek)
+    cached = dek_cache.get(key)
+    if cached is not None:
+        return cached
+    response = client.secrets.transit.decrypt_data(
+        name=kek_name,
+        ciphertext=encrypted_dek,
+        mount_point=settings.vault_transit_mount,
+    )
+    dek = base64.b64decode(response["data"]["plaintext"], validate=True)
+    if len(dek) != 32:
+        raise ValueError("AES-256-GCM requires a 32-byte DEK")
+    dek_cache.put(key, dek)
+    return dek
+
+
 def decrypt_sensitive_value(
     client: hvac.Client,
     *,
@@ -103,12 +175,7 @@ def decrypt_sensitive_value(
     record_type: str,
 ) -> str:
     """Unwrap the DEK through Vault, then authenticate/decrypt the stored data."""
-    response = client.secrets.transit.decrypt_data(
-        name=kek_name,
-        ciphertext=encrypted_dek,
-        mount_point=settings.vault_transit_mount,
-    )
-    dek = base64.b64decode(response["data"]["plaintext"], validate=True)
+    dek = unwrap_dek(client, encrypted_dek=encrypted_dek, kek_name=kek_name)
     return decrypt_with_dek(
         ciphertext=ciphertext,
         dek=dek,

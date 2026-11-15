@@ -15,6 +15,12 @@ x-app-environment: &app-environment
   DB_PORT: "5432"
   DB_NAME: "encryption_db"
   DB_ROTATION_INTERVAL_SECONDS: "1800"
+  DB_POOL_SIZE: "${DB_POOL_SIZE:-20}"
+  DB_MAX_OVERFLOW: "${DB_MAX_OVERFLOW:-20}"
+  # 0 keeps T08 honest. Set 120 (or higher) only when measuring configuration D'.
+  DEK_CACHE_TTL_SECONDS: "${DEK_CACHE_TTL_SECONDS:-0}"
+  DEK_CACHE_MAX_ENTRIES: "${DEK_CACHE_MAX_ENTRIES:-1024}"
+  UVICORN_WORKERS: "${UVICORN_WORKERS:-2}"
   API_KEY: "${API_KEY:?API_KEY must be set in the environment or root .env}"
   ADMIN_API_KEY: "${ADMIN_API_KEY:?ADMIN_API_KEY must be set in the environment or root .env}"
   VAULT_ADDR: "http://vault:8200"
@@ -39,6 +45,7 @@ x-init-environment: &init-environment
 services:
   postgres:
     image: postgres:16-alpine
+    command: ["postgres", "-c", "max_connections=200"]
     environment:
       POSTGRES_DB: "encryption_db"
       POSTGRES_USER: "postgres"

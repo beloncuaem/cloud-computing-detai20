@@ -12,7 +12,7 @@ Stack này dựng PostgreSQL, Vault và API bằng một lệnh để SV3 có th
 | `vault-init` | build từ `api` | Chạy `setup_vault.py` một lần | Có root token + mật khẩu `vault_admin` |
 | `api` | build từ `api` | FastAPI tại cổng 8000 | Chạy root trong container; không nhận root token |
 
-Các rủi ro còn lại phải ghi vào báo cáo: Vault dev mode, TLS chưa bật, `vault_admin` là SUPERUSER, image chạy root, audit log tạm thời. Stack này không dùng để tuyên bố đã đạt T13.
+Các rủi ro còn lại phải ghi vào báo cáo: Vault dev mode, TLS chưa bật, image chạy root, audit log tạm thời. `vault_admin` không còn SUPERUSER (D-05): chỉ `CREATEROLE NOINHERIT`, quyền bảng nằm ở `app_writer`. Stack này không dùng để tuyên bố đã đạt T13.
 
 ## 2. Yêu cầu
 

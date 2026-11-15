@@ -33,6 +33,7 @@
 | `T16_alert_2026-11-14.png` | T16: burst 200 decrypt bằng demo token, ALERT latency 0,3s, EXIT=2 | 14/11/2026 | Hợp lệ |
 | `pr10_ci_green.png` | PR #10: workflow `security-gate` run #21 Status Success, `gitleaks` + `unit-tests` đều xanh | 14/11/2026 | Hợp lệ |
 | `smoke_ps1_execution_policy_2026-11-14.md` | Chạy thật `smoke-test.ps1` bằng Bypass phạm vi tiến trình (9/9, hai chế độ credential); nguyên nhân gốc policy Restricted + chứng minh không nới policy; khôi phục `USE_VAULT_DB_CREDS=true`; mục lục 9 ảnh thật 14/11 | 14/11/2026 | Hợp lệ (SV3) |
+| `D05_D08_2026-11-15.md` | D-05: `vault_admin` bỏ SUPERUSER (`NOSUPERUSER NOCREATEDB CREATEROLE NOINHERIT`), không đọc trực tiếp dữ liệu; D-08: pool 20+20, 2 worker, connection tách khỏi Vault call, DEK cache sẵn sàng cho D'; lệnh kiểm tra quyền và đối chiếu mã | 15/11/2026 | Hợp lệ (SV3 kiểm tra mã) |
 
 ## Ghi chú
 
