@@ -22,7 +22,17 @@
 | `T06_T08_2026-10-31.md` | T06: checker FAIL do D-01 (policy còn rotate/read metadata); T08: chưa có rewrap/min version (D-03) → **chưa đạt** | 31/10/2026 | Bản ghi defect cũ (trước sửa) |
 | `T06_T08_2026-11-05.md` | T06: checker PASS exit 0, rotate bị 403; T10: SecretID 10m/1-use; T08: đủ 7 bước xoay KEK + rewrap DEK + chặn v1 → **ĐẠT** (đóng D-01, D-02, D-03, D-06) | 05/11/2026 | Hợp lệ (SV2 nghiệm thu) |
 | `T06_T08_T15_2026-11-11.md` | SV3 tái kiểm chứng độc lập trên stack dựng lại sạch từ `main` (`down -v` → `up -d --build`): `vault-init` exit 0, smoke **9/9**, T06 checker 9/9 PASS + rotate 403, SecretID 600s/1-use + reuse bị từ chối, T08 đủ 7 bước (v1→v2, chặn v1). Phát hiện và đóng **D-09** (`generate_secret_id` nhận sai keyword làm `vault-init` exit 1) kèm regression test. **Mục 8 (phụ lục 21:19–21:24):** xoay khóa lab lần 2, dựng lại sạch lần nữa (`vault-init` exit 0 lúc 21:19:13), smoke **9/9** lần 3 lúc 21:23:51 chạy bằng bản sao Python của `smoke-test.ps1` vì phiên tự động bị execution policy chặn chạy `.ps1` (không nới policy) | 11/11/2026 | Hợp lệ (SV3 tái kiểm chứng); riêng lệnh `.ps1` cần thành viên chạy lại trong PowerShell tương tác |
-| `git_history_tag_2026-11-11.md` | Lịch sử Git đủ 3 người đóng góp (3 email; 4 tên hiển thị vì SV2 dùng 2 tên cùng email) và tag nghiệm thu `v0.9.0-rc1` tại `b333621` (head PR #10 lúc gắn tag, đã push, không di chuyển); mục 4.1 ghi các commit bằng chứng bổ sung sau tag; giải thích vì sao chưa phải `v1.0.0` | 11/11/2026 | Bản ghi terminal; cần ảnh chụp màn hình thật |
+| `git_history_tag_2026-11-11.md` | Lịch sử Git đủ 3 người đóng góp (3 email; 4 tên hiển thị vì SV2 dùng 2 tên cùng email) và tag nghiệm thu `v0.9.0-rc1` tại `b333621` (head PR #10 lúc gắn tag, đã push, không di chuyển); mục 4.1 ghi các commit bằng chứng bổ sung sau tag; giải thích vì sao chưa phải `v1.0.0` | 11/11/2026 | Bản ghi terminal; ảnh thật đã có 14/11 (`git_log_3_authors.png`) |
+| `git_log_3_authors.png` | Ảnh terminal thật: `shortlog -sne --all` (3 email), graph, `tag --list` + `rev-list -n1 v0.9.0-rc1`, HEAD `c69d124` | 14/11/2026 | Hợp lệ |
+| `smoke_ps1_2026-11-14.png` | Ảnh terminal thật: `scripts/smoke-test.ps1` chạy thật bằng Bypass phạm vi tiến trình, 9/9 PASS; policy hiệu lực sau chạy vẫn Restricted | 14/11/2026 | Hợp lệ |
+| `sensitive_records_schema.png` | `\d sensitive_records`: chỉ `ciphertext`/`nonce`/`encrypted_dek` (+ metadata), không plaintext; 0 bản ghi | 14/11/2026 | Hợp lệ |
+| `pg_dump_no_plaintext.png` | Giá trị dò duy nhất: 0 dòng trong `pg_dump`; dọn sạch bản ghi dò sau khi chụp | 14/11/2026 | Hợp lệ |
+| `rotation_lease_audit.png` | Xoay KEK (operator) + rewrap DEK + audit `transit/keys/.../rotate` + thu hồi lease DB động | 14/11/2026 | Hợp lệ |
+| `k6_summary_median.png` | Bảng median p50/p95/p99/RPS/error mỗi cấu hình/mức VU (A/D-lab/E-lab) + overhead H1 | 14/11/2026 | Hợp lệ |
+| `vault_audit_transit_database.png` | Audit Vault ghi truy cập Database (`database/creds/app-role`) và Transit (`transit/decrypt`); đếm 2 / 406 dòng | 14/11/2026 | Hợp lệ |
+| `T16_alert_2026-11-14.png` | T16: burst 200 decrypt bằng demo token, ALERT latency 0,3s, EXIT=2 | 14/11/2026 | Hợp lệ |
+| `pr10_ci_green.png` | PR #10: workflow `security-gate` run #21 Status Success, `gitleaks` + `unit-tests` đều xanh | 14/11/2026 | Hợp lệ |
+| `smoke_ps1_execution_policy_2026-11-14.md` | Chạy thật `smoke-test.ps1` bằng Bypass phạm vi tiến trình (9/9, hai chế độ credential); nguyên nhân gốc policy Restricted + chứng minh không nới policy; khôi phục `USE_VAULT_DB_CREDS=true`; mục lục 9 ảnh thật 14/11 | 14/11/2026 | Hợp lệ (SV3) |
 
 ## Ghi chú
 
@@ -32,15 +42,20 @@
 - `ruleset_rules.png` chưa mở rộng mục "Require a pull request before merging" nên chưa thấy số approval yêu cầu (1). Khi tiện, chụp thêm ảnh đã mở rộng mục này.
 - Ruleset `main-1` đã gán hai required checks `gitleaks` và `unit-tests` ngày 31/10/2026 (xác nhận qua API, xem `T11_T12_2026-10-31.md`). Cần chụp lại màn hình Settings → Rules → `main-1` với mục status checks mở rộng.
 - Ảnh lỗi PowerShell (`Set-Location ... 'liệu'`) là lỗi thao tác cục bộ, không phải bằng chứng kỹ thuật, không đưa vào báo cáo.
-- Chưa có ảnh `git_log_3_authors.png`: phiên làm việc tự động ngày 11/11 mở cửa sổ terminal rồi chụp màn hình nhưng mặt bàn chụp được không chứa cửa sổ nào (kiểm bằng `EnumWindows` = 0 cửa sổ visible), nên ảnh chỉ có hình nền đã bị xóa, không commit. Bằng chứng lịch sử Git hiện là bản ghi terminal trong `git_history_tag_2026-11-11.md`; ảnh thật cần thành viên chụp trực tiếp trên máy của mình.
+- Ảnh `git_log_3_authors.png` **đã có** ngày 14/11/2026 (chụp terminal thật). Lần thử 11/11 thất bại vì probe liệt kê cửa sổ bị lỗi trả về 0 cửa sổ (không phải bằng chứng vắng mặt); ngày 14/11 dùng probe ctypes đã sửa và helper chỉ chụp đúng vùng cửa sổ terminal, kèm cổng kiểm tra số màu để loại ảnh nền/GUI. Chi tiết ở mục 5 của `git_history_tag_2026-11-11.md`.
+- Ngày 14/11/2026 khôi phục `USE_VAULT_DB_CREDS=true` trong `.env` (bản dựng lại sạch trước đó để nhầm mặc định `false` của `.env.example`, khiến API dùng credential DB tĩnh và audit không có dòng `database/creds`). Sau khi bật lại và dựng lại `api`, smoke chạy thật vẫn **9/9** và audit có `database/creds/app-role` (xem `vault_audit_transit_database.png`). Chế độ `true` là chế độ đúng cho T09/T10 và buổi demo.
 
 ## Cần chụp bổ sung
 
-- [ ] PR có CI check xanh (sau khi thêm workflow Gitleaks)
-- [ ] Ảnh chụp màn hình git log cuối dự án: bản ghi terminal đã có (`git_history_tag_2026-11-11.md`, 3 email tác giả, tag `v0.9.0-rc1` tại `b333621`); thành viên ngồi trước máy chạy lại các lệnh trong biên bản và chụp đặt tên `git_log_3_authors.png`. Chỉ tag `v1.0.0` khi T13 đạt và D-05/D-08 đóng
-- [ ] Bảng `sensitive_records` chỉ có `ciphertext`/`nonce`/`encrypted_dek`, không có plaintext
-- [ ] `pg_dump` hoặc tìm kiếm plaintext trả 0 kết quả
-- [ ] Log rotation KEK/DEK và thu hồi lease
-- [ ] Kết quả k6: p50/p95/p99, RPS, error rate
-- [ ] Audit log của Vault ghi nhận truy cập Transit/Database
-- [ ] Ảnh chụp terminal T16 (dùng kèm `T16_alert_2026-10-31.md`)
+Tất cả các mục dưới đây đã có ảnh thật ngày 14/11/2026 (chụp terminal thật hoặc trang GitHub công khai), đặt trong thư mục này:
+
+- [x] PR có CI check xanh (sau khi thêm workflow Gitleaks) → `pr10_ci_green.png` (run #21, `gitleaks` + `unit-tests` Success)
+- [x] Ảnh chụp màn hình git log cuối dự án → `git_log_3_authors.png` (3 email tác giả, tag `v0.9.0-rc1` tại `b333621`, HEAD `c69d124`). Chỉ tag `v1.0.0` khi T13 đạt và D-05/D-08 đóng
+- [x] Bảng `sensitive_records` chỉ có `ciphertext`/`nonce`/`encrypted_dek`, không có plaintext → `sensitive_records_schema.png`
+- [x] `pg_dump` hoặc tìm kiếm plaintext trả 0 kết quả → `pg_dump_no_plaintext.png`
+- [x] Log rotation KEK/DEK và thu hồi lease → `rotation_lease_audit.png`
+- [x] Kết quả k6: p50/p95/p99, RPS, error rate → `k6_summary_median.png`
+- [x] Audit log của Vault ghi nhận truy cập Transit/Database → `vault_audit_transit_database.png`
+- [x] Ảnh chụp terminal T16 (dùng kèm `T16_alert_2026-10-31.md`) → `T16_alert_2026-11-14.png`
+
+Còn mở (không thuộc phần chụp ảnh của SV3): ảnh mở rộng mục "Require a pull request before merging" và mục status checks của ruleset `main-1` (xem Ghi chú); các mục này cần thành viên ngồi trước máy chụp Settings → Rules.

@@ -103,11 +103,13 @@ Vì vậy **tag `v0.9.0-rc1` vẫn trỏ `b333621`, không di chuyển** (đã p
 
 Trạng thái nghiệm thu cuối cùng trên `main` sẽ được đánh dấu bằng `v1.0.0` sau khi PR #10 merge **và** T13 đạt, D-05/D-08 đóng hoặc được chấp nhận rủi ro bằng văn bản.
 
-## 5. Giới hạn: chưa có ảnh chụp màn hình thật
+## 5. Ảnh chụp màn hình thật: hạn chế 11/11 và cách khắc phục 14/11
 
-Đã thử chụp màn hình thật từ phiên làm việc tự động: mở một cửa sổ PowerShell phóng to toàn màn hình chạy các lệnh trên rồi chụp toàn màn hình. Kết quả kiểm tra cho thấy mặt bàn mà phiên tự động chụp được **không có cửa sổ nào** (`EnumWindows` trả về 0 cửa sổ visible; ảnh chụp chỉ có hình nền), nên cửa sổ terminal mở từ phiên này không hiện lên đó. Ảnh chỉ-có-hình-nền đã **xóa, không commit**, vì không chứng minh được điều gì.
+**Ngày 11/11** đã thử chụp màn hình thật từ phiên làm việc tự động: mở một cửa sổ PowerShell phóng to toàn màn hình chạy các lệnh trên rồi chụp toàn màn hình. Kết quả kiểm tra khi đó báo mặt bàn chụp được **không có cửa sổ nào** (`EnumWindows` trả về 0 cửa sổ visible; ảnh chỉ có hình nền), nên ảnh đã **xóa, không commit**. Về sau xác định con số 0 đó là do **probe liệt kê cửa sổ bị lỗi** (ép kiểu `Add-Type` sai trong PowerShell), **không** phải bằng chứng là không có cửa sổ: một probe hỏng trả về "0" không chứng minh được sự vắng mặt.
 
-Vì vậy bằng chứng lịch sử Git hiện là **bản ghi terminal ở mục 2** (đúng quy ước các biên bản khác trong thư mục này). Ảnh chụp màn hình thật vẫn là mục còn mở trong `README.md` của thư mục bằng chứng: thành viên nào ngồi trước máy hãy mở PowerShell tại gốc repo, chạy đúng các lệnh mục 2 và chụp lại, đặt tên `git_log_3_authors.png`.
+**Ngày 14/11** chụp lại thành công bằng probe đã sửa (ctypes `EnumWindows` đúng chữ ký hàm, đếm được 17 cửa sổ visible) và một helper chụp chỉ lấy đúng vùng chữ nhật của cửa sổ terminal đang chạy lệnh (ép `HWND_TOPMOST` + kiểm tra `GetForegroundWindow` để không chụp nhầm cửa sổ khác; cổng kiểm tra số màu loại ảnh nền/GUI). Ảnh thật `git_log_3_authors.png` (chụp 14/11/2026 22:13:32, trên `main` sau khi PR #10 merge tại `c69d124`) ghi `git shortlog -sne --all`, số email tác giả khác nhau = 3, `git log --oneline --graph --decorate -5`, `git tag --list` + `git rev-list -n1 v0.9.0-rc1`, và HEAD hiện tại. Mục "Cần chụp bổ sung" trong `README.md` đã đánh dấu hoàn thành cho ảnh này.
+
+Bản ghi terminal ở mục 2 vẫn là bằng chứng gốc chạy ngày 11/11 (trước `0906e48`); ảnh 14/11 bổ trợ và phản ánh trạng thái **sau** merge, nên số commit trong ảnh lớn hơn bảng mục 3 (đếm lại tại `15acc08`: SV3 = 31, tổng 39; tại `c69d124` xem ảnh). Kết luận "đủ 3 người đóng góp, 3 email" không đổi.
 
 ## 6. Tái lập
 
