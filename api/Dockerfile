@@ -17,4 +17,5 @@ COPY tests ./tests
 
 EXPOSE 8000
 
-CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]
+# UVICORN_WORKERS defaults to 2 (D-08). Credential rotation stays process-local.
+CMD ["sh", "-c", "exec uvicorn app.main:app --host 0.0.0.0 --port 8000 --workers ${UVICORN_WORKERS:-2}"]

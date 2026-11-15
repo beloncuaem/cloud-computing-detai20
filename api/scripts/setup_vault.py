@@ -110,18 +110,21 @@ def configure_database_engine(client: hvac.Client) -> None:
         password=DB_ADMIN_PASSWORD,
         mount_point=DATABASE_MOUNT,
     )
+    # vault_admin is not a superuser. It only grants membership in app_writer,
+    # which already holds CONNECT and the table/sequence privileges.
     creation_statements = [
         'CREATE ROLE "{{name}}" WITH LOGIN PASSWORD \'{{password}}\' VALID UNTIL \'{{expiration}}\';',
-        f'GRANT CONNECT ON DATABASE {DB_NAME} TO "{{{{name}}}}";',
-        'GRANT USAGE ON SCHEMA public TO "{{name}}";',
-        'GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE sensitive_records TO "{{name}}";',
-        'GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE audit_events TO "{{name}}";',
-        'GRANT USAGE, SELECT ON SEQUENCE audit_events_id_seq TO "{{name}}";',
+        'GRANT app_writer TO "{{name}}";',
+    ]
+    revocation_statements = [
+        'REVOKE app_writer FROM "{{name}}";',
+        'DROP ROLE IF EXISTS "{{name}}";',
     ]
     client.secrets.database.create_role(
         name=DATABASE_ROLE,
         db_name=DATABASE_CONNECTION,
         creation_statements=creation_statements,
+        revocation_statements=revocation_statements,
         default_ttl="1h",
         max_ttl="24h",
         mount_point=DATABASE_MOUNT,

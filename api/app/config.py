@@ -25,6 +25,14 @@ class Settings:
     db_rotation_interval_seconds: int = max(
         60, int(os.getenv("DB_ROTATION_INTERVAL_SECONDS", "1800"))
     )
+    # Sized for the 100-VU benchmark. Each worker has its own pool.
+    db_pool_size: int = max(1, int(os.getenv("DB_POOL_SIZE", "20")))
+    db_max_overflow: int = max(0, int(os.getenv("DB_MAX_OVERFLOW", "20")))
+    # 0 disables the DEK cache. A positive TTL is configuration D': repeated
+    # unwraps of the same wrapped DEK skip Vault. While an entry is live,
+    # min_decryption_version is not consulted for that ciphertext.
+    dek_cache_ttl_seconds: int = max(0, int(os.getenv("DEK_CACHE_TTL_SECONDS", "0")))
+    dek_cache_max_entries: int = max(1, int(os.getenv("DEK_CACHE_MAX_ENTRIES", "1024")))
 
     vault_addr: str = os.getenv("VAULT_ADDR", "http://127.0.0.1:8200")
     vault_approle_file: str = os.getenv(

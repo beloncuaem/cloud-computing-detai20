@@ -371,10 +371,10 @@ Quy trình T08 là: xoay KEK → đọc lại bản ghi cũ → rewrap toàn b�
 | D-02 | SecretID workload đặt 10 phút và 1 lần dùng | Đã nghiệm thu ĐẠT ngày 05/11/2026 (InvalidSecretId khi tái sử dụng) | SV2 |
 | D-03 | Đã có rewrap và `min_decryption_version` | Đã nghiệm thu ĐẠT ngày 05/11/2026 (đủ 7 bước T08) | SV2 |
 | D-04 | Vault dev mode, HTTP, root token trong lab | Không dùng production | SV1/SV3 |
-| D-05 | `vault_admin` là SUPERUSER PostgreSQL | Rủi ro leo thang quyền trong lab | SV1 |
+| D-05 | `vault_admin` không còn SUPERUSER: `LOGIN CREATEROLE NOINHERIT`, dữ liệu chỉ qua `app_writer` | Đóng trong mã 15/11; volume cũ phải áp lại SQL | SV2 |
 | D-06 | `.vscode/settings.json` bỏ khỏi Git; `.gitignore` đã chặn thư mục này | Không còn file editor trong lịch sử mới | SV2 |
 | D-07 | Baseline plaintext dựng riêng | Chỉ dùng đo H1, không merge vào app | SV3 |
-| D-08 | Pool 5+10, một Uvicorn worker; connection bị giữ trong lúc gọi Vault | Trần ~110 RPS, 100 VUs sụp; chưa scale ngang | SV2/SV3 |
+| D-08 | Pool mặc định 20+20, 2 Uvicorn worker; connection trả về pool trước khi gọi Vault. Cache DEK tắt mặc định, bật bằng `DEK_CACHE_TTL_SECONDS` khi đo D' | Đóng phần pool/worker trong mã 15/11. Số liệu D-lab cũ vẫn là trần ~110 RPS trước khi sửa | SV2 |
 | D-09 | `generate_secret_id` bị truyền `secret_id_ttl`/`secret_id_num_uses` (hvac không nhận) ở `setup_vault.py` và `issue_workload_secret.py` | `vault-init` exit 1, không tạo role operator, **không dựng được stack từ mã đã commit**; phát hiện 11/11 khi tái lập | SV3 (đã sửa + regression test, nghiệm thu 11/11) |
 
 ### 4.3. Tính liên tục khi xoay vòng

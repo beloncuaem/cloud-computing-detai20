@@ -43,7 +43,7 @@ Với T16 (kiểm tra false positive của cảnh báo giải mã), chạy tải
 | C | TLS + mã hóa volume | Chờ SV1 + BitLocker/volume encryption |
 | D | TLS + envelope encryption | Đo được phần envelope; nếu chưa có TLS thì ghi là `D-lab` |
 | E | D + rotation | Kết quả hiện tại là `E-lab` (envelope qua HTTP + xoay DB credential/KEK) |
-| D' | D sau tối ưu | Sau khi SV2 cache DEK/giảm gọi Vault |
+| D' | D sau tối ưu | Cùng stack D-lab nhưng `DEK_CACHE_TTL_SECONDS=120` (cache DEK). Mặc định `0` để T08 vẫn chặn version cũ |
 
 Không được ghi `D-lab` thành `D` trong báo cáo. Mỗi cấu hình chạy tối thiểu 5 lần; mỗi lần 3–5 phút; lặp lại ở 10, 50, 100 VUs. Khởi động lại stack trước mỗi cấu hình.
 

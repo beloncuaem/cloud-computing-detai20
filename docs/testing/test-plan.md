@@ -693,10 +693,10 @@ docker run --rm -v "${PWD}:/work" -w /work python:3.12-slim `
 | D-02 | Cao | AppRole `secret_id_ttl=0s`, `secret_id_num_uses=0` | `api/scripts/setup_vault.py` | SV2 | Đã sửa thành 10m và 1 lần dùng; kiểm chứng replay bị từ chối (05/11) — Đóng |
 | D-03 | Cao | Chưa có rewrap và `min_decryption_version` sau khi xoay KEK | `api/scripts/rewrap_dek.py` | SV2 | Đã có đủ 7 bước T08, rewrap thành công, chặn v1 thành công (05/11) — Đóng |
 | D-04 | Trung bình | Stack dự phòng dùng Vault dev mode, HTTP, root token; không dùng cho production | `docker-compose.yml` | SV1/SV3 | Chấp nhận trong lab, ghi rõ |
-| D-05 | Trung bình | `vault_admin` là PostgreSQL SUPERUSER | `sql/00-create-roles.sql` | SV1 | Chấp nhận trong lab, ghi rõ |
+| D-05 | Trung bình | `vault_admin` là PostgreSQL SUPERUSER | `sql/00-create-roles.sql` | SV2 (bản phân công gốc giao SV1) | Đã bỏ SUPERUSER: `NOSUPERUSER NOCREATEDB CREATEROLE NOINHERIT`, dữ liệu qua `app_writer`; kiểm tra mã + thiết kế quyền ĐẠT — 15/11 — Đóng |
 | D-06 | Thấp | `.vscode/settings.json` còn tracked; `.gitignore` từng bỏ qua CSV benchmark | repo | SV2/SV3 | `.vscode/` đã đưa vào `.gitignore` và bỏ khỏi index — Đóng |
 | D-07 | Trung bình | Chưa có cấu hình baseline plaintext (A) cho H1 | `bench/baseline/server.py` | SV2/SV3 | Đã có baseline, giữ tách khỏi app |
-| D-08 | Trung bình | Pool 5+10, một Uvicorn worker; connection bị giữ trong lúc gọi Vault | `api/app/database.py` | SV2/SV3 | Mở; đã ghi trong mục 4.4 |
+| D-08 | Trung bình | Pool 5+10, một Uvicorn worker; connection bị giữ trong lúc gọi Vault | `api/app/database.py` | SV2 | Pool 20+20, 2 worker, connection không giữ khi gọi Vault; D' bật bằng `DEK_CACHE_TTL_SECONDS`; kiểm tra mã ĐẠT — 15/11 — Đóng (D' chưa đo benchmark) |
 | D-09 | Cao | `generate_secret_id` bị truyền `secret_id_ttl`/`secret_id_num_uses` (hai tham số cấp role, hvac 2.4.0 không nhận) ở `setup_vault.py:157` và `issue_workload_secret.py:19` → `vault-init` exit 1, không tạo role operator, không dựng được stack từ mã đã commit | `docs/evidence/T06_T08_T15_2026-11-11.md` mục 1 | SV3 | Đã sửa (bỏ keyword thừa, giữ TTL ở cấp role) + regression test `api/tests/test_approle_secret_id_calls.py`; suite 11/11 pass; `vault-init` exit 0, smoke 9/9 (11/11) — Đóng |
 
 ## 7. Điều kiện nghiệm thu
@@ -711,7 +711,7 @@ Chỉ tag `v1.0.0` khi:
 - Ruleset yêu cầu `gitleaks` và 1 approval; push trực tiếp bị chặn.
 - Báo cáo có bảng kết quả, ảnh bằng chứng, phần rủi ro còn lại và kế hoạch mất khóa.
 
-**Trạng thái đối chiếu ngày 11/11/2026:** T06 và T08 đã ĐẠT (SV2 nghiệm thu 05/11, SV3 tái kiểm chứng độc lập 11/11 trên stack dựng lại từ `main`). **T13 vẫn CHƯA ĐẠT**, D-05 và D-08 còn mở, B/C chưa đo. Vì vậy bản nghiệm thu gắn thẻ **`v0.9.0-rc1`** (release candidate), **không phải `v1.0.0`**.
+**Trạng thái đối chiếu ngày 15/11/2026:** T06 và T08 đã ĐẠT (SV2 nghiệm thu 05/11, SV3 tái kiểm chứng độc lập 11/11 trên stack dựng lại từ `main`). **T13 vẫn CHƯA ĐẠT**, B/C chưa đo. D-05 đã đóng: `vault_admin` bỏ `SUPERUSER`, giữ `CREATEROLE NOINHERIT`; D-08 đã đóng: pool 20+20, 2 worker, connection tách khỏi Vault call; DEK cache sẵn sàng cho D'. Biên bản evidence: `docs/evidence/D05_D08_2026-11-15.md`. Benchmark D' cần đo trước khi tag `v1.0.0`.
 
 **Điều kiện bổ sung rút ra từ D-09:** một ca chỉ được ghi "ĐẠT" khi có lệnh tái lập chạy được từ `main` sạch (`docker compose down -v` → `up -d --build` → `vault-init` exit 0). Biên bản ghi trên máy cá nhân mà mã đã commit không dựng lại được thì chưa đủ điều kiện nghiệm thu.
 
@@ -731,4 +731,4 @@ Lịch gốc dưới đây được giữ làm hồ sơ. **Thay đổi đã ch�
 | 07/11 | Dự phòng | Cả nhóm | — |
 | 11/11 | Tái lập stack từ `main`, tái kiểm chứng T06/T08/T15, sửa D-09, đo bổ sung cấu hình A | SV3 | Đã xong |
 
-**Việc còn lại trước buổi demo:** SV1 bàn giao TLS (T13) hoặc chuẩn bị cảnh "vì sao chưa đạt" theo mục 4 phương án B của kịch bản; SV2 đóng D-08 để đo cấu hình D'; cả nhóm rehearsal 2 lần có bấm giờ và điền nhật ký ở mục 8 của kịch bản demo.
+**Việc còn lại trước buổi demo:** SV1 bàn giao TLS (T13) hoặc chuẩn bị cảnh "vì sao chưa đạt" theo mục 4 phương án B của kịch bản; đo benchmark cấu hình D' (`DEK_CACHE_TTL_SECONDS=120`, 10/50/100 VUs, 5 lần/mức); cả nhóm rehearsal 2 lần có bấm giờ và điền nhật ký ở mục 8 của kịch bản demo.

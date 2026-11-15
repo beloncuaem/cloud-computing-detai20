@@ -10,7 +10,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app.database import get_db
+from app.database import get_db, session_scope
 from app.models import AuditEvent, SensitiveRecord
 from app.schemas import RecordCreate, RecordCreated, RecordMetadata, RecordRead
 from app.security import require_api_key
@@ -41,7 +41,9 @@ def _audit(
 
 
 @router.post("", response_model=RecordCreated, status_code=status.HTTP_201_CREATED)
-def create_record(payload: RecordCreate, db: Session = Depends(get_db)) -> RecordCreated:
+def create_record(payload: RecordCreate) -> RecordCreated:
+    # Vault runs before a connection is checked out so the pool is not held
+    # for the Transit round trip (D-08).
     record_id = uuid.uuid4()
     try:
         client = get_vault_client()
@@ -55,36 +57,41 @@ def create_record(payload: RecordCreate, db: Session = Depends(get_db)) -> Recor
             detail="Encryption service is unavailable",
         ) from exc
 
-    row = SensitiveRecord(
-        id=record_id,
-        record_type=payload.record_type,
-        ciphertext=encrypted.ciphertext,
-        nonce=encrypted.nonce,
-        encrypted_dek=encrypted.encrypted_dek,
-        kek_name=encrypted.kek_name,
-        kek_version=encrypted.kek_version,
-    )
-    db.add(row)
-    _audit(
-        db,
-        event_type="record.create",
-        outcome="success",
-        record_id=record_id,
-        details={"record_type": payload.record_type, "encryption": "AES-256-GCM"},
-    )
     try:
-        db.commit()
-        db.refresh(row)
+        with session_scope() as db:
+            row = SensitiveRecord(
+                id=record_id,
+                record_type=payload.record_type,
+                ciphertext=encrypted.ciphertext,
+                nonce=encrypted.nonce,
+                encrypted_dek=encrypted.encrypted_dek,
+                kek_name=encrypted.kek_name,
+                kek_version=encrypted.kek_version,
+            )
+            db.add(row)
+            _audit(
+                db,
+                event_type="record.create",
+                outcome="success",
+                record_id=record_id,
+                details={"record_type": payload.record_type, "encryption": "AES-256-GCM"},
+            )
+            db.commit()
+            db.refresh(row)
+            created_at = row.created_at or datetime.now(timezone.utc)
+            stored_id = row.id
+            stored_type = row.record_type
+    except HTTPException:
+        raise
     except Exception as exc:
-        db.rollback()
         logger.exception("Database insert failed")
         raise HTTPException(status_code=503, detail="Could not store encrypted record") from exc
 
     return RecordCreated(
-        id=row.id,
-        record_type=row.record_type,
+        id=stored_id,
+        record_type=stored_type,
         status="encrypted_and_stored",
-        created_at=row.created_at or datetime.now(timezone.utc),
+        created_at=created_at,
     )
 
 
@@ -128,49 +135,60 @@ def get_record_metadata(record_id: uuid.UUID, db: Session = Depends(get_db)) -> 
 
 
 @router.get("/{record_id}", response_model=RecordRead)
-def read_record(record_id: uuid.UUID, db: Session = Depends(get_db)) -> RecordRead:
-    row = db.get(SensitiveRecord, record_id)
-    if row is None:
-        raise HTTPException(status_code=404, detail="Record not found")
+def read_record(record_id: uuid.UUID) -> RecordRead:
+    with session_scope() as db:
+        row = db.get(SensitiveRecord, record_id)
+        if row is None:
+            raise HTTPException(status_code=404, detail="Record not found")
+        stored_id = row.id
+        stored_type = row.record_type
+        ciphertext = bytes(row.ciphertext)
+        nonce = bytes(row.nonce)
+        encrypted_dek = row.encrypted_dek
+        kek_name = row.kek_name
+        created_at = row.created_at
+
     try:
         value = decrypt_sensitive_value(
             get_vault_client(),
-            ciphertext=row.ciphertext,
-            nonce=row.nonce,
-            encrypted_dek=row.encrypted_dek,
-            kek_name=row.kek_name,
-            record_id=row.id,
-            record_type=row.record_type,
+            ciphertext=ciphertext,
+            nonce=nonce,
+            encrypted_dek=encrypted_dek,
+            kek_name=kek_name,
+            record_id=stored_id,
+            record_type=stored_type,
         )
     except Exception as exc:
         logger.exception("Decryption failed for record ID %s", record_id)
-        _audit(
-            db,
-            event_type="record.read",
-            outcome="failure",
-            record_id=record_id,
-            details={"reason": "decrypt_failed"},
-        )
         try:
-            db.commit()
+            with session_scope() as db:
+                _audit(
+                    db,
+                    event_type="record.read",
+                    outcome="failure",
+                    record_id=record_id,
+                    details={"reason": "decrypt_failed"},
+                )
+                db.commit()
         except Exception:
-            db.rollback()
+            logger.exception("Could not persist decrypt-failure audit event")
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
             detail="Could not decrypt this record; check Vault access and key availability",
         ) from exc
 
-    _audit(
-        db,
-        event_type="record.read",
-        outcome="success",
-        record_id=record_id,
-        details={"operation": "decrypt"},
-    )
-    db.commit()
+    with session_scope() as db:
+        _audit(
+            db,
+            event_type="record.read",
+            outcome="success",
+            record_id=record_id,
+            details={"operation": "decrypt"},
+        )
+        db.commit()
     return RecordRead(
-        id=row.id,
-        record_type=row.record_type,
+        id=stored_id,
+        record_type=stored_type,
         value=value,
-        created_at=row.created_at,
+        created_at=created_at,
     )

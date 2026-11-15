@@ -45,7 +45,7 @@ api/
 ## 2. Tạo role và bảng trong PostgreSQL
 
 1. Mở VS Code SQLTools hoặc pgAdmin và kết nối bằng tài khoản quản trị PostgreSQL, thường là `postgres`.
-2. Mở `sql/00-create-roles.sql`, chạy khi kết nối vào `encryption_db` hoặc `postgres`. File tạo `app_user` và `vault_admin` nếu chưa có. **Đây là cấu hình demo cục bộ**; `vault_admin` được cấp SUPERUSER để đơn giản hóa thử nghiệm Vault Database Secrets Engine. Không dùng thiết kế quyền này cho môi trường thật.
+2. Mở `sql/00-create-roles.sql`, chạy khi kết nối vào `encryption_db` hoặc `postgres`. File tạo `app_user`, role `app_writer` (NOLOGIN) và `vault_admin`. `vault_admin` chỉ có `LOGIN`, `CREATEROLE`, `NOINHERIT`, không phải superuser: nó cấp membership `app_writer` cho credential động và không đọc được bảng.
 3. Chuyển kết nối sang database `encryption_db`.
 4. Mở `sql/01-schema.sql` và chạy để tạo hai bảng `sensitive_records`, `audit_events`.
 5. Nếu bạn đã tạo hai bảng rồi thì chạy lại vẫn được vì có `CREATE TABLE IF NOT EXISTS`.
@@ -169,6 +169,6 @@ Không commit `.env`, `vault-credentials.json`, mật khẩu, token hay bất k�
 ## Giới hạn và lưu ý bảo mật
 
 - Vault dev mode dùng cho học tập; khi tắt server có thể mất cấu hình/khóa. Chạy lại `setup_vault.py` nếu cần dựng lại môi trường dev.
-- Cấu hình PostgreSQL `vault_admin` trong file SQL được cấp SUPERUSER để giảm khó khăn khi thực hành plugin dynamic database. Đây là quyền quá rộng đối với hệ thống thật; production phải dùng quyền tối thiểu.
+- `vault_admin` không còn là superuser. Quyền dữ liệu nằm ở `app_writer`; credential động chỉ được `GRANT app_writer`. Cache DEK (`DEK_CACHE_TTL_SECONDS`) mặc định tắt vì khi bật, `min_decryption_version` không được hỏi lại cho ciphertext còn trong cache.
 - TLS chưa được thiết lập trong hướng dẫn local này. Không dùng các endpoint/secret demo ở môi trường thật.
 - Zero-downtime phải được chứng minh bằng kiểm thử tải khi xoay vòng; một request thành công không đủ chứng minh.

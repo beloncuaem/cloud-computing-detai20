@@ -25,3 +25,10 @@ GRANT USAGE ON SCHEMA public TO app_user;
 GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE sensitive_records TO app_user;
 GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE audit_events TO app_user;
 GRANT USAGE, SELECT ON SEQUENCE audit_events_id_seq TO app_user;
+
+-- Dynamic Vault roles inherit these grants through membership in app_writer.
+-- vault_admin is NOINHERIT, so it can grant the role but cannot read the tables.
+GRANT USAGE ON SCHEMA public TO app_writer;
+GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE sensitive_records TO app_writer;
+GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE audit_events TO app_writer;
+GRANT USAGE, SELECT ON SEQUENCE audit_events_id_seq TO app_writer;
