@@ -1,0 +1,442 @@
+{
+  "slides": [
+    {
+      "layout": 0,
+      "title": "BẢO VỆ DỮ LIỆU BẰNG MÃ HÓA, QUẢN LÝ KHÓA VÀ VÒNG ĐỜI BÍ MẬT",
+      "subtitle": "Đồ án học phần Điện toán đám mây — Đề tài 20 · Nhóm 4\nHK1 năm học 2026–2027 · Trường Đại học Giao thông vận tải TP.HCM\nSV1 Hồ Thiên Phú 052205010238 · SV2 Nguyễn Minh Hiếu 075206006264 · SV3 Bùi Ngô Anh Quang 066206019831\nGVHD: ……………………………",
+      "bullets": null,
+      "columns": null,
+      "image": null,
+      "image_caption": null,
+      "notes": "SV3: Chào thầy/cô và các bạn, nhóm em gồm ba thành viên xin trình bày đề tài 20 về bảo vệ dữ liệu bằng mã hóa, quản lý khóa và vòng đời bí mật. Bài gồm lý thuyết, hiện thực trên lab Docker, đo lường kiểm chứng và demo trực tiếp trên máy. Sau đây là nội dung và phân công thuyết trình."
+    },
+    {
+      "layout": 1,
+      "title": "Nội dung và phân công thuyết trình",
+      "subtitle": null,
+      "bullets": [
+        "Vấn đề và mục tiêu — SV3 (2 phút)",
+        "Lý thuyết và kiến trúc — SV1 (4 phút)",
+        "Hiện thực và vòng đời khóa — SV2 (4 phút)",
+        "Đo lường và kiểm chứng — SV3 (4 phút)",
+        "Demo trực tiếp — SV2 thao tác (6 phút)",
+        "Kết luận và Q&A — cả nhóm"
+      ],
+      "columns": null,
+      "image": null,
+      "image_caption": null,
+      "notes": "SV3: Điểm nhanh bố cục 6 phần và người trình bày tương ứng. Phần demo chiếm khoảng 4 phút và chạy thật trên máy, không dùng video. Tổng thời gian khoảng 15 phút, chưa gồm Q&A."
+    },
+    {
+      "layout": 1,
+      "title": "Vấn đề: mã hóa chưa đủ nếu khóa quản lý sai",
+      "subtitle": null,
+      "bullets": [
+        "Mật khẩu database hardcode trong mã nguồn",
+        "Token/API key nằm trong lịch sử Git",
+        "Khóa mã hóa lưu cùng nơi với dữ liệu",
+        "Ứng dụng có quyền giải mã quá rộng",
+        "Câu hỏi nghiên cứu: mã hóa bảo vệ đến đâu khi khóa, secret và quyền giải mã không tách biệt?"
+      ],
+      "columns": null,
+      "image": null,
+      "image_caption": null,
+      "notes": "SV3: Nêu bốn lỗ hổng quản lý khóa và secret điển hình mà đồ án nhắm tới. Nhấn mạnh câu hỏi nghiên cứu: mã hóa chỉ bảo vệ được dữ liệu khi khóa và quyền giải mã tách biệt. Đây là lý do chọn envelope encryption kết hợp Vault."
+    },
+    {
+      "layout": 1,
+      "title": "Mục tiêu và phạm vi",
+      "subtitle": null,
+      "bullets": [
+        "Envelope encryption: AES-256-GCM + Vault Transit",
+        "Bỏ mật khẩu DB tĩnh: Database Secrets Engine + AppRole",
+        "Vòng đời bí mật: tạo – phân phối – xoay – thu hồi – audit",
+        "Chứng minh dịch vụ liên tục khi xoay khóa/credential",
+        "Kiểm chứng T01–T16 + k6 10/50/100 VUs",
+        "Phạm vi: lab Docker Desktop, dữ liệu giả, demo trực tiếp không video"
+      ],
+      "columns": null,
+      "image": null,
+      "image_caption": null,
+      "notes": "SV3: Trình bày sáu mục tiêu, từ envelope AES-256-GCM đến kiểm chứng T01–T16 và tải k6. Phạm vi là lab Docker Desktop với dữ liệu giả, demo trực tiếp không video. Đồ án không tuyên bố giải pháp production."
+    },
+    {
+      "layout": 1,
+      "title": "Ba trạng thái dữ liệu và lớp bảo vệ",
+      "subtitle": null,
+      "bullets": [
+        "In transit → TLS 1.2/1.3",
+        "At rest → mã hóa volume/TDE",
+        "In use → envelope encryption cấp ứng dụng",
+        "Đồ án triển khai lớp in use + TLS cho cả ba biên",
+        "At-rest cấp volume: chấp nhận rủi ro có văn bản"
+      ],
+      "columns": null,
+      "image": null,
+      "image_caption": null,
+      "notes": "SV1: Phân biệt ba trạng thái dữ liệu và lớp bảo vệ tương ứng. Đồ án tập trung lớp in use bằng envelope và TLS cho cả ba biên. At-rest cấp volume được chấp nhận rủi ro có văn bản, sẽ nói rõ ở phần T13."
+    },
+    {
+      "layout": 5,
+      "title": "Mã hóa phong bì: DEK và KEK",
+      "subtitle": null,
+      "bullets": [
+        "DEK 256-bit sinh mới cho mỗi bản ghi",
+        "KEK không rời Vault Transit",
+        "AAD = record_id:record_type chống tráo payload",
+        "Chỉ lưu ciphertext, nonce, encrypted_dek, kek_version"
+      ],
+      "columns": null,
+      "image": "docs/report/figures/fig_envelope.png",
+      "image_caption": "Sơ đồ mã hóa phong bì DEK/KEK (fig_envelope.png, báo cáo đồ án).",
+      "notes": "SV1: Giải thích sơ đồ phong bì: mỗi bản ghi có DEK 256-bit riêng, KEK nằm trong Vault Transit và không export. AAD gắn record_id:record_type để chống tráo payload. Cơ sở dữ liệu chỉ lưu ciphertext, nonce, encrypted_dek và kek_version."
+    },
+    {
+      "layout": 5,
+      "title": "Kiến trúc lab: TLS kết thúc tại nginx",
+      "subtitle": null,
+      "bullets": [
+        "nginx: 8200 → Vault, 8443 → API, 8444 → baseline",
+        "Vault dev mode HTTP trong mạng Docker nội bộ",
+        "PostgreSQL ssl=on",
+        "API: 2 Uvicorn worker, pool 20+20"
+      ],
+      "columns": null,
+      "image": "docs/report/figures/fig_architecture.png",
+      "image_caption": "Kiến trúc lab với TLS kết thúc tại nginx (fig_architecture.png, báo cáo đồ án).",
+      "notes": "SV1: Mô tả kiến trúc lab: nginx kết thúc TLS, chuyển 8200 về Vault, 8443 về API, 8444 về baseline. Vault chạy dev mode HTTP trong mạng Docker nội bộ, PostgreSQL bật ssl. API chạy 2 Uvicorn worker, pool 20+20."
+    },
+    {
+      "layout": 1,
+      "title": "Ranh giới bảo mật và least privilege",
+      "subtitle": null,
+      "bullets": [
+        "AppRole app chỉ được 4 path: datakey/plaintext, decrypt, rewrap, database/creds",
+        "Deny rotate/keys/export/config",
+        "AppRole operator giữ quyền xoay khóa, không mount vào API",
+        "SecretID: TTL 10 phút, dùng 1 lần",
+        "Admin key tách biệt app key"
+      ],
+      "columns": null,
+      "image": null,
+      "image_caption": null,
+      "notes": "SV1: Phân tích ranh giới bảo mật: AppRole của app chỉ chạm 4 path cần thiết, deny các path quản trị. Operator giữ quyền xoay khóa và không mount vào API. SecretID TTL 10 phút, dùng một lần; admin key tách biệt app key."
+    },
+    {
+      "layout": 1,
+      "title": "Vòng đời bí mật 5 bước",
+      "subtitle": null,
+      "bullets": [
+        "Tạo: setup_vault chạy một lần",
+        "Phân phối: AppRole login, token TTL ngắn",
+        "Xoay: credential DB kiểm tra trước khi đổi pool; operator xoay KEK; workload rewrap",
+        "Thu hồi: revoke lease; SecretID lộ phải hủy",
+        "Audit: file device + cảnh báo ngưỡng"
+      ],
+      "columns": null,
+      "image": null,
+      "image_caption": null,
+      "notes": "SV2: Đi qua vòng đời bí mật 5 bước. Điểm đáng nhớ: credential DB mới phải được kiểm tra trước khi đổi pool, và mọi thao tác đều để lại audit. Thu hồi lease và hủy SecretID khi lộ."
+    },
+    {
+      "layout": 1,
+      "title": "Hiện thực envelope trong API",
+      "subtitle": null,
+      "bullets": [
+        "generate_data_key bits=256",
+        "Nonce 12 byte từ os.urandom",
+        "AES-256-GCM với AAD",
+        "Không lưu plaintext DEK",
+        "Schema sensitive_records không có cột plaintext",
+        "Lỗi giải mã → 503 + audit decrypt_failed"
+      ],
+      "columns": null,
+      "image": null,
+      "image_caption": null,
+      "notes": "SV2: Chi tiết hiện thực envelope trong API: gọi generate_data_key bits=256, nonce 12 byte từ os.urandom, AES-256-GCM kèm AAD. Không lưu plaintext DEK và schema không có cột plaintext. Lỗi giải mã trả 503 và ghi audit decrypt_failed."
+    },
+    {
+      "layout": 1,
+      "title": "Credential động không gián đoạn",
+      "subtitle": null,
+      "bullets": [
+        "USE_VAULT_DB_CREDS=true → gọi database/creds/app-role",
+        "Engine mới được SELECT 1 trước khi nhận tải",
+        "Pool cũ dispose(close=False), giữ đến hết lease",
+        "T09: 6.399 request, 0 lỗi khi xoay ở giây 20"
+      ],
+      "columns": null,
+      "image": null,
+      "image_caption": null,
+      "notes": "SV2: Giải thích cơ chế credential động không gián đoạn: engine mới được SELECT 1 trước khi nhận tải, pool cũ dispose(close=False) giữ đến hết lease. T09 ghi nhận 6.399 request, 0 lỗi khi xoay ở giây 20."
+    },
+    {
+      "layout": 1,
+      "title": "DevSecOps: chặn secret từ CI",
+      "subtitle": null,
+      "bullets": [
+        "gitleaks v8.24.0 quét toàn bộ lịch sử, exit 1 khi leak",
+        "Ruleset main-1: PR + 1 approval + 2 check bắt buộc",
+        "Cảnh báo >200 decrypt/60s từ audit",
+        "Smoke test 9 điểm, gồm truy vấn thẳng PostgreSQL"
+      ],
+      "columns": null,
+      "image": null,
+      "image_caption": null,
+      "notes": "SV2: Trình bày lớp DevSecOps: gitleaks chặn secret từ CI, ruleset main-1 bắt buộc PR, approval và 2 check. Cảnh báo ngưỡng hơn 200 decrypt trong 60s từ audit; smoke test 9 điểm gồm truy vấn thẳng PostgreSQL."
+    },
+    {
+      "layout": 1,
+      "title": "Thiết kế đo lường",
+      "subtitle": null,
+      "bullets": [
+        "Ma trận 4 cấu hình đo:",
+        "– B: plaintext + TLS",
+        "– D: envelope + TLS, cache DEK = 0",
+        "– D': cache DEK 120s",
+        "– E: D + xoay khóa trong cửa sổ đo",
+        "k6 0.54.0, constant-vus 10/50/100 VUs × 5 lần × 3 phút",
+        "Báo cáo trung vị p95 giữa các lần chạy",
+        "C không đo: BitLocker Off, at-rest risk-accepted"
+      ],
+      "columns": null,
+      "image": null,
+      "image_caption": null,
+      "notes": "SV3: Giới thiệu thiết kế đo lường với ma trận B, D, D', E và kịch bản k6 constant-vus. Mỗi cấu hình chạy 5 lần, mỗi lần 3 phút, lấy trung vị p95. Cấu hình C không đo vì BitLocker Off và at-rest đã risk-accepted."
+    },
+    {
+      "layout": 5,
+      "title": "Kết quả kiểm thử T01–T16",
+      "subtitle": null,
+      "bullets": null,
+      "columns": null,
+      "image": null,
+      "image_caption": null,
+      "table": {
+        "headers": [
+          "Ca",
+          "Kết quả"
+        ],
+        "rows": [
+          [
+            "T01–T05",
+            "ĐẠT"
+          ],
+          [
+            "T06/T08",
+            "ĐẠT 05/11, tái kiểm chứng 11/11"
+          ],
+          [
+            "T09/T10",
+            "ĐẠT 0 lỗi"
+          ],
+          [
+            "T11/T12",
+            "ĐẠT"
+          ],
+          [
+            "T13",
+            "ĐẠT phần TLS 16/11; at-rest risk-accepted"
+          ],
+          [
+            "T14",
+            "Đủ ma trận B/D/D'/E 16/11"
+          ],
+          [
+            "T15",
+            "ĐẠT — tái lập từ main sạch"
+          ],
+          [
+            "T16",
+            "ĐẠT — bắt burst 0,4s"
+          ]
+        ]
+      },
+      "notes": "SV3: Tóm tắt kết quả 16 ca kiểm thử theo nhóm. T06/T08 và T13 có mốc thời gian tái kiểm chứng rõ ràng. T15 xác nhận tái lập từ main sạch, T16 bắt burst trong 0,4s."
+    },
+    {
+      "layout": 5,
+      "title": "Hiệu năng qua TLS — trung vị 5 lần chạy",
+      "subtitle": null,
+      "bullets": null,
+      "columns": null,
+      "image": null,
+      "image_caption": null,
+      "table": {
+        "headers": [
+          "Cấu hình",
+          "VUs",
+          "p95 ms",
+          "RPS",
+          "Lỗi"
+        ],
+        "rows": [
+          [
+            "B",
+            "10",
+            "{{B_P95_10}}",
+            "{{B_RPS_10}}",
+            "{{ERR_B_10}}"
+          ],
+          [
+            "B",
+            "50",
+            "{{B_P95_50}}",
+            "{{B_RPS_50}}",
+            "{{ERR_B_50}}"
+          ],
+          [
+            "B",
+            "100",
+            "{{B_P95_100}}",
+            "{{B_RPS_100}}",
+            "{{ERR_B_100}}"
+          ],
+          [
+            "D",
+            "10",
+            "{{D_P95_10}}",
+            "{{D_RPS_10}}",
+            "{{ERR_D_10}}"
+          ],
+          [
+            "D",
+            "50",
+            "{{D_P95_50}}",
+            "{{D_RPS_50}}",
+            "{{ERR_D_50}}"
+          ],
+          [
+            "D",
+            "100",
+            "{{D_P95_100}}",
+            "{{D_RPS_100}}",
+            "{{ERR_D_100}}"
+          ],
+          [
+            "D'",
+            "10",
+            "{{DP_P95_10}}",
+            "{{DP_RPS_10}}",
+            "{{ERR_DP_10}}"
+          ],
+          [
+            "D'",
+            "50",
+            "{{DP_P95_50}}",
+            "{{DP_RPS_50}}",
+            "{{ERR_DP_50}}"
+          ],
+          [
+            "D'",
+            "100",
+            "{{DP_P95_100}}",
+            "{{DP_RPS_100}}",
+            "{{ERR_DP_100}}"
+          ],
+          [
+            "E",
+            "10",
+            "{{E_P95_10}}",
+            "{{E_RPS_10}}",
+            "{{ERR_E_10}}"
+          ],
+          [
+            "E",
+            "50",
+            "{{E_P95_50}}",
+            "{{E_RPS_50}}",
+            "{{ERR_E_50}}"
+          ],
+          [
+            "E",
+            "100",
+            "{{E_P95_100}}",
+            "{{E_RPS_100}}",
+            "{{ERR_E_100}}"
+          ]
+        ]
+      },
+      "notes": "SV3: Đọc bảng hiệu năng qua TLS, trung vị 5 lần chạy cho 4 cấu hình ở 10/50/100 VUs. So sánh p95 và RPS giữa B và D để thấy overhead envelope, giữa D và D' để thấy lợi ích cache. Đối chiếu cột lỗi để khẳng định không phát sinh lỗi khi xoay."
+    },
+    {
+      "layout": 1,
+      "title": "H1 và H2: kết luận thẳng thắn",
+      "subtitle": null,
+      "bullets": [
+        "H1 — overhead p95 ≤ 30%: {{H1_KETLUAN}}",
+        "Overhead đo được: {{H1_10}} / {{H1_50}} (10/50 VUs)",
+        "H2 — lỗi < 0,1% khi xoay: {{H2_KETLUAN}}",
+        "D' cho thấy lợi ích cache DEK: {{CACHE_EFFECT}}",
+        "Không tuyên bố production từ số liệu một máy"
+      ],
+      "columns": null,
+      "image": null,
+      "image_caption": null,
+      "notes": "SV3: Kết luận thẳng thắn hai giả thuyết H1 và H2 dựa trên ngưỡng đã đặt. Nêu lợi ích cache DEK qua cấu hình D'. Nhấn mạnh không tuyên bố production từ số liệu một máy."
+    },
+    {
+      "layout": 1,
+      "title": "T13: TLS thật, at-rest chấp nhận rủi ro",
+      "subtitle": null,
+      "bullets": [
+        "curl https 8200/8443 trả 200 qua nginx 1.27.5",
+        "TLSv1.2 ECDHE-RSA-AES128-GCM-SHA256; TLSv1.3 TLS_AES_256_GCM_SHA384",
+        "SHOW ssl=on; pg_stat_ssl TLSv1.3",
+        "BitLocker Off (probe UAC) → risk-accepted bằng văn bản, không đo C",
+        "Chứng từ: docs/evidence/T13_2026-11-16.md"
+      ],
+      "columns": null,
+      "image": null,
+      "image_caption": null,
+      "notes": "SV3: Trình bày chứng từ T13: TLS thật qua nginx, cipher TLSv1.2 và TLSv1.3, PostgreSQL ssl=on. BitLocker Off nên at-rest được chấp nhận rủi ro bằng văn bản, không đo C. Chứng từ lưu tại docs/evidence/T13_2026-11-16.md."
+    },
+    {
+      "layout": 1,
+      "title": "DEMO TRỰC TIẾP (chạy thật trên máy)",
+      "subtitle": null,
+      "bullets": [
+        "Bước 1: smoke 9/9 qua https 8443",
+        "Bước 2: create/read rồi pg_dump khẳng định không plaintext",
+        "Bước 3: k6 50 VUs + xoay credential/KEK giữa chừng, 0 lỗi",
+        "Bước 4: burst 200 decrypt → ALERT trong <1s",
+        "Phân công: SV2 gõ lệnh, SV1 giải thích Vault, SV3 đọc số liệu"
+      ],
+      "columns": null,
+      "image": null,
+      "image_caption": null,
+      "notes": "SV2 thao tác demo trực tiếp (~4 phút, rút gọn từ docs/demo/kich-ban-demo-truc-tiep.md): create/read rồi pg_dump (T02), least privilege + rotate 403 (T06), xoay KEK/credential không gián đoạn (T08/T09), burst 200 decrypt (T16). SV1 giải thích phía Vault, SV3 đọc số liệu. Smoke 9/9 phải chạy trước giờ demo; nếu hỏng thì chuyển sang chứng từ, không demo live."
+    },
+    {
+      "layout": 1,
+      "title": "Rủi ro còn lại và hướng phát triển",
+      "subtitle": null,
+      "bullets": [
+        "Vault dev mode 1 nút: mất container là mất khóa",
+        "Plaintext tồn tại trong RAM",
+        "Rotation process-local, chưa scale ngang",
+        "Chưa backup tự động",
+        "Hướng phát triển: Vault file storage + HA, mTLS, HSM, cache DEK có kiểm soát, đưa tái lập vào CI"
+      ],
+      "columns": null,
+      "image": null,
+      "image_caption": null,
+      "notes": "SV2: Nêu các rủi ro còn lại của lab: Vault dev mode một nút, plaintext trong RAM, rotation process-local, chưa backup tự động. Hướng phát triển gồm Vault file storage + HA, mTLS, HSM và đưa tái lập vào CI. Đây là phần trung thực về giới hạn của đồ án."
+    },
+    {
+      "layout": 1,
+      "title": "Kết luận — Cảm ơn và Q&A",
+      "subtitle": null,
+      "bullets": [
+        "Mã hóa chỉ có giá trị khi khóa và quyền giải mã tách khỏi dữ liệu",
+        "15/16 ca ĐẠT + T13 risk-accepted minh bạch",
+        "Tag v1.0.0 chỉ gắn khi đủ điều kiện nghiệm thu",
+        "Ba SV sẵn sàng phản biện theo phần được phân công"
+      ],
+      "columns": null,
+      "image": null,
+      "image_caption": null,
+      "notes": "SV3: Kết luận thông điệp chính: mã hóa chỉ có giá trị khi khóa và quyền giải mã tách khỏi dữ liệu. 15/16 ca ĐẠT, T13 risk-accepted minh bạch; tag v1.0.0 chỉ gắn khi đủ điều kiện nghiệm thu. Cả nhóm sẵn sàng phản biện theo phần được phân công. Cảm ơn thầy/cô và các bạn."
+    }
+  ]
+}
