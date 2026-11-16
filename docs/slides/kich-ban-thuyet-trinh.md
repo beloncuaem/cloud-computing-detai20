@@ -89,7 +89,7 @@
 "Bảng này là trung vị 5 lần chạy cho bốn cấu hình ở ba mức tải. So **B với D** để thấy overhead của envelope; so **D với D'** để thấy lợi ích cache DEK; đối chiếu cột lỗi để thấy xoay vòng ở E không gây lỗi. Mức nào sụp bão hòa được đánh dấu và không dùng tính H1. Số liệu đo trên một máy, không suy diễn production."
 
 ### Slide 16 — H1 và H2 (SV3, 0:40)
-"Kết luận thẳng thắn theo ngưỡng đã đặt. **H1 — overhead p95 ≤ 30%: @@H1_KETLUAN@@.** Overhead đo được của D so với B là @@H1_D_10@@ ở 10 VUs và @@H1_D_50@@ ở 50 VUs; với D' còn @@H1_DP_10@@ và @@H1_DP_50@@. **H2 — lỗi < 0,1% khi xoay: @@H2_KETLUAN@@.** Cache DEK cho lợi ích rõ: @@CACHE_EFFECT@@ Nhóm em không tuyên bố production từ số liệu một máy."
+"Kết luận thẳng thắn theo ngưỡng đã đặt. **H1 — overhead p95 ≤ 30%: đạt một phần.** Overhead đo được của D so với B là +30,95% ở 10 VUs và +25,29% ở 50 VUs; với D' còn +37,90% và +26,26%. **H2 — lỗi < 0,1% khi xoay: đạt.** Cache DEK cho lợi ích rõ: so với D, D' thay đổi p95 +5,30% ở 10 VUs, p95 +0,77% ở 50 VUs, p95 -1,29% ở 100 VUs. Nhóm em không tuyên bố production từ số liệu một máy."
 
 ### Slide 17 — T13: TLS thật, at-rest risk-accepted (SV3, 0:35)
 "Chứng từ T13: `curl -k` qua nginx trả 200; `openssl s_client` thương lượng TLSv1.2 và TLSv1.3; PostgreSQL `SHOW ssl` = on và `pg_stat_ssl` ghi nhận connection TLS từ API. BitLocker Off nên at-rest được **chấp nhận rủi ro bằng văn bản**, không đo C. Chứng từ lưu tại `docs/evidence/T13_2026-11-16.md`. Giới hạn còn lại: cert tự ký và đoạn nội bộ nginx→Vault vẫn HTTP trong mạng một máy."

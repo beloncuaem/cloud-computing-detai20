@@ -263,18 +263,18 @@ So với cách thủ công (đổi mật khẩu + restart API tạo cửa sổ 5
 
 | Mức tải | Cấu hình | RPS | p50 (ms) | p95 (ms) | p99 (ms) | Error rate |
 |---:|---|---:|---:|---:|---:|---:|
-| 10 VUs | B | @@B_RPS_10@@ | @@B_P50_10@@ | @@B_P95_10@@ | @@B_P99_10@@ | @@B_ERR_10@@ |
-| 10 VUs | D | @@D_RPS_10@@ | @@D_P50_10@@ | @@D_P95_10@@ | @@D_P99_10@@ | @@D_ERR_10@@ |
-| 10 VUs | D' | @@DP_RPS_10@@ | @@DP_P50_10@@ | @@DP_P95_10@@ | @@DP_P99_10@@ | @@DP_ERR_10@@ |
-| 10 VUs | E | @@E_RPS_10@@ | @@E_P50_10@@ | @@E_P95_10@@ | @@E_P99_10@@ | @@E_ERR_10@@ |
-| 50 VUs | B | @@B_RPS_50@@ | @@B_P50_50@@ | @@B_P95_50@@ | @@B_P99_50@@ | @@B_ERR_50@@ |
-| 50 VUs | D | @@D_RPS_50@@ | @@D_P50_50@@ | @@D_P95_50@@ | @@D_P99_50@@ | @@D_ERR_50@@ |
-| 50 VUs | D' | @@DP_RPS_50@@ | @@DP_P50_50@@ | @@DP_P95_50@@ | @@DP_P99_50@@ | @@DP_ERR_50@@ |
-| 50 VUs | E | @@E_RPS_50@@ | @@E_P50_50@@ | @@E_P95_50@@ | @@E_P99_50@@ | @@E_ERR_50@@ |
-| 100 VUs | B | @@B_RPS_100@@ | @@B_P50_100@@ | @@B_P95_100@@ | @@B_P99_100@@ | @@B_ERR_100@@ |
-| 100 VUs | D | @@D_RPS_100@@ | @@D_P50_100@@ | @@D_P95_100@@ | @@D_P99_100@@ | @@D_ERR_100@@ |
-| 100 VUs | D' | @@DP_RPS_100@@ | @@DP_P50_100@@ | @@DP_P95_100@@ | @@DP_P99_100@@ | @@DP_ERR_100@@ |
-| 100 VUs | E | @@E_RPS_100@@ | @@E_P50_100@@ | @@E_P95_100@@ | @@E_P99_100@@ | @@E_ERR_100@@ |
+| 10 VUs | B | 149,80 | 67,39 | 85,84 | 95,44 | 0,00% |
+| 10 VUs | D | 153,68 | 62,90 | 112,42 | 131,06 | 0,00% |
+| 10 VUs | D' | 147,69 | 65,22 | 118,37 | 137,75 | 0,00% |
+| 10 VUs | E | 139,45 | 69,47 | 123,83 | 144,33 | 0,00% |
+| 50 VUs | B | 150,63 | 330,68 | 373,44 | 403,17 | 0,00% |
+| 50 VUs | D | 135,51 | 364,91 | 467,88 | 527,71 | 0,00% |
+| 50 VUs | D' | 133,72 | 370,59 | 471,50 | 520,87 | 0,00% |
+| 50 VUs | E | 130,17 | 380,36 | 486,07 | 544,64 | 0,00% |
+| 100 VUs | B | 151,60 | 656,80 | 716,31 | 958,58 | 0,00% |
+| 100 VUs | D | 129,85 | 759,77 | 891,73 | 973,73 | 0,00% |
+| 100 VUs | D' | 133,15 | 740,72 | 880,23 | 959,68 | 0,00% |
+| 100 VUs | E | 131,26 | 756,28 | 869,74 | 941,81 | 0,00% |
 
 Số liệu sinh bằng `bench/analyze.py` từ `bench/results/{B,D,Dprime,E}_*_run{1..5}.csv.gz` và `_summary.json`; cột lỗi là tỷ lệ `http_req_failed` lớn nhất trong 5 lần. Mức nào sụp bão hòa (p95 chạm timeout 60 s của k6, lỗi vượt ngưỡng) được đánh dấu và **không** dùng tính H1, theo đúng nguyên tắc đã áp dụng cho D-lab 100 VUs trước đây.
 
@@ -284,13 +284,13 @@ Số liệu sinh bằng `bench/analyze.py` từ `bench/results/{B,D,Dprime,E}_*_
 
 | VUs | B p95 | D p95 | Overhead D | D' p95 | Overhead D' |
 |---:|---:|---:|---:|---:|---:|
-| 10 | @@B_P95_10@@ | @@D_P95_10@@ | @@H1_D_10@@ | @@DP_P95_10@@ | @@H1_DP_10@@ |
-| 50 | @@B_P95_50@@ | @@D_P95_50@@ | @@H1_D_50@@ | @@DP_P95_50@@ | @@H1_DP_50@@ |
-| 100 | @@B_P95_100@@ | @@D_P95_100@@ | @@H1_D_100@@ | @@DP_P95_100@@ | @@H1_DP_100@@ |
+| 10 | 85,84 | 112,42 | +30,95% | 118,37 | +37,90% |
+| 50 | 373,44 | 467,88 | +25,29% | 471,50 | +26,26% |
+| 100 | 716,31 | 891,73 | +24,49% | 880,23 | +22,88% |
 
-**H1 — overhead p95 ≤ 30%: @@H1_KETLUAN@@.** @@H1_DIENGIAI@@ Nguyên nhân chi phí là mỗi request tạo gọi `transit/datakey`, mỗi request đọc gọi `transit/decrypt`; 70% tải là tạo. Vault, PostgreSQL và API dùng chung CPU một máy. D' cho thấy phần chi phí gọi Vault có thể giảm bằng cache DEK có kiểm soát: @@CACHE_EFFECT@@ Đánh đổi này phải cân nhắc với cửa sổ plaintext DEK trong bộ nhớ (mục 5.2).
+**H1 — overhead p95 ≤ 30%: đạt một phần.** Overhead p95 của D (envelope, không cache) so với baseline B là +30,95% ở 10 VUs, +25,29% ở 50 VUs, +24,49% ở 100 VUs. Với D' (cache DEK 120 s) overhead còn +37,90% ở 10 VUs, +26,26% ở 50 VUs, +22,88% ở 100 VUs.  Nguyên nhân chi phí là mỗi request tạo gọi `transit/datakey`, mỗi request đọc gọi `transit/decrypt`; 70% tải là tạo. Vault, PostgreSQL và API dùng chung CPU một máy. D' cho thấy phần chi phí gọi Vault có thể giảm bằng cache DEK có kiểm soát: so với D, D' thay đổi p95 +5,30% ở 10 VUs, p95 +0,77% ở 50 VUs, p95 -1,29% ở 100 VUs. Đánh đổi này phải cân nhắc với cửa sổ plaintext DEK trong bộ nhớ (mục 5.2).
 
-**H2 — lỗi < 0,1% khi xoay vòng: @@H2_KETLUAN@@.** @@H2_DIENGIAI@@
+**H2 — lỗi < 0,1% khi xoay vòng: đạt.** E xoay credential DB ở giây 60 và xoay KEK trong cửa sổ đo; tỷ lệ http_req_failed lớn nhất trên các mức không bão hòa là 0,00%, toàn bộ các mức là 0,00%.
 
 **H3/H4:** T11 đạt (0 leak, fake bị bắt); T02 đạt (0 plaintext ở DB/dump/log/image); T13 đạt phần TLS và quét secret trong image ra 0; T16 đạt (không báo nhầm, bắt burst).
 
@@ -300,7 +300,7 @@ Nghiệm thu 16/11/2026 trên stack dựng từ nhánh hoàn thiện (`docs/evid
 
 ### 4.6. Thảo luận và hiệu lực đo
 
-Số liệu trên một máy cá nhân, cùng ổ đĩa và Docker Desktop; không suy diễn production. Chưa đo CPU từng run; nếu cần, chạy `docker stats` song song và ghi thời điểm lấy mẫu. Baseline dùng chung PostgreSQL nhưng bảng riêng, không gọi Vault: so sánh "cùng DB, khác lớp mã hóa". Số liệu TLS 16/11 thay thế vai trò của D-lab trong kết luận H1; bộ A/D-lab/E-lab cũ giữ ở Phụ lục B làm mốc trước-sau và cho thấy ảnh hưởng của D-08 (trần ~110 RPS với pool 5+10, một worker). Hai phiên đo A cũ khác thủ tục khởi động stack nên không dùng để tuyên bố độ chính xác tuyệt đối. Tag nghiệm thu: `v0.9.0-rc1` giữ nguyên; `v1.0.0` chỉ gắn khi T13 đạt và D-05/D-08 đóng hoặc risk-accepted bằng văn bản — điều kiện TLS và risk-accepted đã thỏa ngày 16/11, phần còn lại chờ PR #14 hợp nhất vào `main`. D-09 để lại bài học quy trình: mọi ca "ĐẠT" phải kèm lệnh tái lập chạy được từ `main` sạch.
+Số liệu trên một máy cá nhân, cùng ổ đĩa và Docker Desktop; không suy diễn production. Chưa đo CPU từng run; nếu cần, chạy `docker stats` song song và ghi thời điểm lấy mẫu. Baseline dùng chung PostgreSQL nhưng bảng riêng, không gọi Vault: so sánh "cùng DB, khác lớp mã hóa". Ở cả bốn cấu hình qua TLS, thông lượng đi ngang quanh ~130–154 RPS bất kể mức 10/50/100 VUs, còn p50 tăng gần tuyến tính theo số VUs (B: ~67 ms ở 10 VUs lên ~657 ms ở 100 VUs) — đặc trưng xếp hàng vòng kín của k6 `constant-vus` với `SLEEP=0`: khi chạm trần phục vụ, tăng VUs làm tăng độ trễ chứ không tăng thông lượng (Little's law: p50 ≈ VUs/RPS). Trần ~150 RPS là giới hạn của lab một máy (PostgreSQL, nginx, Vault, API và k6 cùng chia CPU qua Docker Desktop), không phải lỗi số liệu; không mức nào bão hòa (p95 lớn nhất ~892 ms so với timeout 60 s, lỗi 0,00% mọi mức). Vì thông lượng phẳng, H1 đối chiếu bằng p95 thay vì RPS. Số liệu TLS 16/11 thay thế vai trò của D-lab trong kết luận H1; bộ A/D-lab/E-lab cũ giữ ở Phụ lục B làm mốc trước-sau và cho thấy ảnh hưởng của D-08 (trần ~110 RPS với pool 5+10, một worker). Hai phiên đo A cũ khác thủ tục khởi động stack nên không dùng để tuyên bố độ chính xác tuyệt đối. Tag nghiệm thu: `v0.9.0-rc1` giữ nguyên; `v1.0.0` chỉ gắn khi T13 đạt và D-05/D-08 đóng hoặc risk-accepted bằng văn bản — điều kiện TLS và risk-accepted đã thỏa ngày 16/11, phần còn lại chờ PR #14 hợp nhất vào `main`. D-09 để lại bài học quy trình: mọi ca "ĐẠT" phải kèm lệnh tái lập chạy được từ `main` sạch.
 
 ## CHƯƠNG 5: QUẢN TRỊ RỦI RO, ỨNG PHÓ SỰ CỐ VÀ DỰ TOÁN CHI PHÍ
 

@@ -3,7 +3,7 @@
 """Sinh bộ slide thuyết trình tiếng Việt (~20 trang) theo UTH theme.
 
 Đọc `noid-dung-slide.json` + `uth-template.pptx` (sinh bởi make_template.py),
-xuất `thuyet-trinh-de-tai-20-UTH.pptx`. Chỉ dùng python-pptx + stdlib.
+xuất `de-tai-20.pptx`. Chỉ dùng python-pptx + stdlib.
 
 Quy tắc trình bày:
 - Title dùng placeholder idx 0; cỡ chữ title để theme quyết định (không đổi).
@@ -38,7 +38,7 @@ SCRIPT_DIR = Path(__file__).resolve().parent
 REPO_ROOT = SCRIPT_DIR.parent.parent
 DEFAULT_JSON = SCRIPT_DIR / "noid-dung-slide.json"
 DEFAULT_TEMPLATE = SCRIPT_DIR / "uth-template.pptx"
-DEFAULT_OUT = SCRIPT_DIR / "thuyet-trinh-de-tai-20-UTH.pptx"
+DEFAULT_OUT = SCRIPT_DIR / "de-tai-20.pptx"
 
 SLIDE_W_IN = 13.333
 SLIDE_H_IN = 7.5
