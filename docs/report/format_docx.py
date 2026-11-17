@@ -14,6 +14,7 @@ import sys
 from pathlib import Path
 
 from docx import Document
+from docx.enum.style import WD_STYLE_TYPE
 from docx.enum.table import WD_TABLE_ALIGNMENT
 from docx.enum.text import (
     WD_ALIGN_PARAGRAPH,
@@ -81,16 +82,31 @@ def read_headings(markdown_path: Path) -> list[tuple[int, str]]:
     return headings
 
 
+TOC_STYLE = "MucLucEntry"
+
+
 def populate_toc(document, markdown_path: Path, pages: dict[str, int]) -> None:
+    # Drop entries from a previous pass so re-population is idempotent. The
+    # [[TOC]] marker survives until the final pass supplies real page numbers.
+    for p in list(document.paragraphs):
+        if p.style is not None and p.style.name == TOC_STYLE:
+            p._element.getparent().remove(p._element)
+
     marker = next((p for p in document.paragraphs if p.text.strip() == "[[TOC]]"), None)
     if marker is None:
         print("warning: [[TOC]] marker not found; skipping table of contents")
         return
 
+    try:
+        toc_style = document.styles[TOC_STYLE]
+    except KeyError:
+        toc_style = document.styles.add_style(TOC_STYLE, WD_STYLE_TYPE.PARAGRAPH)
+        toc_style.base_style = document.styles["Normal"]
+
     for level, title in read_headings(markdown_path):
         paragraph = marker.insert_paragraph_before()
-        paragraph.style = document.styles["Normal"]
-        # Keep the whole TOC on one page: 38 entries at 12 pt.
+        paragraph.style = toc_style
+        # Compact spacing to keep the whole TOC on one page.
         paragraph.paragraph_format.space_after = Pt(2 if level == 3 else 5)
         paragraph.paragraph_format.line_spacing_rule = WD_LINE_SPACING.SINGLE
         paragraph.paragraph_format.alignment = WD_ALIGN_PARAGRAPH.LEFT
@@ -108,8 +124,6 @@ def populate_toc(document, markdown_path: Path, pages: dict[str, int]) -> None:
         number_run.font.size = Pt(12.5 if level == 2 else 12)
         number_run.font.bold = level == 2
 
-    marker._element.getparent().remove(marker._element)
-
 
 def main(path: Path, pages_path: Path | None) -> None:
     document = Document(path)
@@ -124,6 +138,10 @@ def main(path: Path, pages_path: Path | None) -> None:
         section.right_margin = Cm(2.0)
         section.different_first_page_header_footer = True
         footer = section.footer.paragraphs[0]
+        # A previous formatting pass already inserted a PAGE field; clear it so
+        # repeated passes don't concatenate page numbers (e.g. "2020").
+        for r in list(footer.runs):
+            r._element.getparent().remove(r._element)
         add_page_number(footer)
 
     styles = document.styles
@@ -191,6 +209,11 @@ def main(path: Path, pages_path: Path | None) -> None:
     if pages_path and pages_path.exists():
         pages = json.loads(pages_path.read_text(encoding="utf-8"))
     populate_toc(document, path.parent / "bao-cao-ky-thuat.md", pages)
+    if pages:
+        # Final pass: real numbers are in, so consume the [[TOC]] marker.
+        marker = next((p for p in document.paragraphs if p.text.strip() == "[[TOC]]"), None)
+        if marker is not None:
+            marker._element.getparent().remove(marker._element)
 
     document.core_properties.title = "Báo cáo kỹ thuật — Đề tài 20: Bảo vệ dữ liệu bằng mã hóa, quản lý khóa và vòng đời bí mật"
     document.core_properties.author = "Bùi Ngô Anh Quang; hothienphu; Nguyễn Minh Hiếu"

@@ -2,7 +2,7 @@
 
 **Thời lượng:** 15–20 phút (mục tiêu 18 phút, chừa 2 phút dự phòng)
 **Hình thức:** trình diễn trực tiếp trước giảng viên, **không dùng video**. Đề bài cho phép "Video demo 8–12 phút **hoặc** trình diễn trực tiếp 15–20 phút, có kịch bản và phân công rõ"; nhóm chọn phương án trực tiếp.
-**Phiên bản áp dụng:** `main` sau PR #10 (`c69d124`), thẻ nghiệm thu `v0.9.0-rc1`. Lịch demo đã đổi so với kế hoạch 11/11; ngày mới chưa chốt — rehearsal kỹ thuật chạy 14/11/2026 (mục 8.1).
+**Phiên bản áp dụng:** worktree `wt-hoanthien` trên nền `origin/main` `dd287d1` + cherry-pick `3e22065` (fix D-05 của PR #14 đang chờ merge). TLS đã có từ 16/11/2026 (biên bản `docs/evidence/T13_2026-11-16.md`); thẻ nghiệm thu hiện tại `v0.9.0-rc1`. Lịch demo đã đổi so với kế hoạch 11/11; ngày mới chưa chốt — rehearsal kỹ thuật chạy 14/11/2026 (mục 8.1), rehearsal có người dẫn **chưa chạy**.
 **Nguyên tắc:** mỗi người dẫn phần của mình, chạy lệnh thật trên máy thật, và **tự trả lời được quyết định kỹ thuật** trong phần phản biện. Ảnh chụp chỉ bổ trợ; log và số liệu mới là bằng chứng.
 
 ## 1. Phân công
@@ -11,7 +11,7 @@
 |---|---|---|---|
 | **SV3** | Bùi Ngô Anh Quang (nhóm trưởng) | `beloncuaem` | Mở đầu, kiến trúc, T10, số liệu benchmark, CI/ruleset, kết luận |
 | **SV2** | Nguyễn Minh Hiếu | `Hieu0408` | Luồng mã hóa bình thường, T02, T03/T04, T06, T08 |
-| **SV1** | SV1 | `hothienphu` | Hạ tầng, T13 (hoặc cảnh "vì sao chưa đạt"), dọn tài nguyên |
+| **SV1** | SV1 | `hothienphu` | Hạ tầng, T13 (TLS đã đạt 16/11; at-rest risk-accepted), dọn tài nguyên |
 
 ## 2. Chuẩn bị trước giờ demo (T−30 phút, SV3 điều phối)
 
@@ -19,22 +19,35 @@
 
 1. **API key chỉ đọc từ môi trường (PR #9).** Thiếu `API_KEY` hoặc `ADMIN_API_KEY` thì `docker compose` thoát ngay và API từ chối khởi động.
 2. **SecretID của workload chỉ dùng 1 lần và hết hạn sau 10 phút (D-02).** Mỗi lần API khởi động lại phải cấp SecretID mới bằng danh tính operator, nếu không API sẽ không đăng nhập được Vault.
+3. **Chứng chỉ lab phải tồn tại trước khi dựng stack** (nginx và PostgreSQL đọc từ `infrastructure/certs/out/`, đã gitignore). Nếu `out/` trống hoặc bị xóa, sinh lại trong Git Bash:
+
+```bash
+MSYS_NO_PATHCONV=1 bash infrastructure/certs/gen-certs.sh
+```
 
 ```powershell
 # (a) Dựng stack sạch — chạy trước, để kịp thời gian build
 docker compose down -v
 docker compose up -d --build
 docker inspect detai20-vault-init-1 --format '{{.State.ExitCode}}'   # phải = 0
-docker compose ps                                                   # api/postgres/vault đều healthy
+docker compose ps                                                   # api/postgres/vault/nginx đều healthy
+
+# (a2) Kiểm tra TLS trước khi demo — nginx terminator phải sống (cert tự ký nên cần -k)
+curl.exe -sk https://127.0.0.1:8443/health          # phải trả {"status":"ok"}
+curl.exe -sk https://127.0.0.1:8200/v1/sys/health   # Vault qua TLS, "initialized":true
 
 # (b) Nạp khóa vào phiên PowerShell (không in giá trị khóa ra màn hình)
 Get-Content .env | ForEach-Object { if ($_ -match '^([A-Z_]+)=(.*)$') { Set-Item -Path "Env:$($Matches[1])" -Value $Matches[2] } }
-$API = "http://127.0.0.1:8000"
+$API = "https://127.0.0.1:8443"   # mọi cảnh demo đi qua TLS (nginx terminator)
 $Headers = @{ "X-API-Key" = $env:API_KEY; "Content-Type" = "application/json" }
 $AdminHeaders = @{ "X-Admin-Key" = $env:ADMIN_API_KEY }
 
-# (c) Smoke test 9/9 — nếu hỏng ở đây thì KHÔNG demo, sửa trước
-./scripts/smoke-test.ps1
+# (b2) Tin CA lab trong store người dùng để Invoke-RestMethod chấp nhận cert tự ký.
+# PowerShell 5.1 không có -SkipCertificateCheck; chỉ tin đúng CA của lab, gỡ sau demo (mục 7).
+Import-Certificate -FilePath infrastructure/certs/out/ca.crt -CertStoreLocation Cert:\CurrentUser\Root
+
+# (c) Smoke test 9/9 qua TLS — nếu hỏng ở đây thì KHÔNG demo, sửa trước
+./scripts/smoke-test.ps1 -BaseUrl $API
 
 # (d) Nếu API đã restart sau khi dựng: cấp SecretID mới rồi restart API
 docker compose run --rm --no-deps --entrypoint python vault-init scripts/issue_workload_secret.py
@@ -46,9 +59,18 @@ docker compose exec -T vault vault read -field=latest_version transit/keys/app-d
 docker compose exec -T vault vault read -field=min_decryption_version transit/keys/app-data-key
 ```
 
+Bổ sung cho (a2) — xác nhận protocol/cipher thật của biên TLS bằng `openssl` trong Git Bash:
+
+```bash
+MSYS_NO_PATHCONV=1 openssl s_client -connect 127.0.0.1:8443 -servername localhost -tls1_2 </dev/null
+MSYS_NO_PATHCONV=1 openssl s_client -connect 127.0.0.1:8443 -servername localhost -tls1_3 </dev/null
+```
+
+Phải thấy `Protocol: TLSv1.2` (cipher ECDHE-RSA-AES128-GCM-SHA256) và `Protocol: TLSv1.3` (TLS_AES_256_GCM_SHA384). `Verify return code: 21` là **đúng kỳ vọng lab**: CA tự ký chưa nằm trong trust store của máy (đã tin riêng cho phiên demo ở bước b2).
+
 **Ghi chú về (e):** nếu `min_decryption_version` đã > 1 từ lần chạy trước, bản ghi tạo mới vẫn ở version mới nhất nên luồng bình thường không ảnh hưởng; nhưng cảnh T08 cần bắt đầu từ một bản ghi ở version hiện hành. Muốn trạng thái hoàn toàn sạch thì lặp lại (a).
 
-**Chuẩn bị màn hình:** 3 cửa sổ PowerShell đặt cạnh nhau (SV3 / SV2 / SV1), font ≥ 16, nền sáng. Cửa sổ SV2 để sẵn ở thư mục gốc repo. Tắt thông báo Windows. Mở sẵn `docs/report/bao-cao-ky-thuat.pdf` ở trang bảng benchmark và `docs/evidence/T06_T08_T15_2026-11-11.md`.
+**Chuẩn bị màn hình:** 3 cửa sổ PowerShell đặt cạnh nhau (SV3 / SV2 / SV1), font ≥ 16, nền sáng. Cửa sổ SV2 để sẵn ở thư mục gốc repo. Tắt thông báo Windows. Mở sẵn `docs/report/bao-cao-ky-thuat.pdf` ở trang bảng benchmark và `docs/evidence/T06_T08_T15_2026-11-11.md`; SV1 mở thêm `docs/evidence/T13_2026-11-16.md` cho cảnh TLS.
 
 **Phương án lỗi tổng:** nếu stack không dựng được trước giờ demo, chuyển sang trình chiếu biên bản `docs/evidence/*.md` + `bench/results/*_summary.json` và nói thẳng "đây là log đã ghi, không phải chạy trực tiếp". Không giả vờ chạy live.
 
@@ -56,22 +78,22 @@ docker compose exec -T vault vault read -field=min_decryption_version transit/ke
 
 | Phút | Nội dung | Người dẫn | Lệnh / cảnh | Kết quả phải thấy |
 |---|---|---|---|---|
-| 0–2 | Vấn đề và kiến trúc: mã hóa dữ liệu là chưa đủ nếu khóa và secret nằm cùng chỗ với dữ liệu. Sơ đồ client → API → Vault (KEK) → PostgreSQL (ciphertext + DEK bọc). Giới thiệu 3 thành viên và phần việc | SV3 | `docker compose ps` | 3 service healthy; chỉ vào cột STATUS |
+| 0–2 | Vấn đề và kiến trúc: mã hóa dữ liệu là chưa đủ nếu khóa và secret nằm cùng chỗ với dữ liệu. Sơ đồ client → nginx (TLS) → API (2 worker) → Vault (KEK, HTTP nội bộ) → PostgreSQL (ssl=on, ciphertext + DEK bọc). Giới thiệu 3 thành viên và phần việc | SV3 | `docker compose ps` | api/postgres/vault/nginx healthy; `vault-init`/`pgcerts` exit 0; chỉ vào cột STATUS |
 | 2–4 | Luồng bình thường: tạo bản ghi, đọc lại, rồi mở DB cho thấy **chỉ có ciphertext** | SV2 | `POST /records` → `GET /records/{id}` → `psql` | HTTP 201/200; bảng chỉ có `ciphertext`, `nonce`, `encrypted_dek`, `kek_version` |
 | 4–5 | Không có plaintext ở cả 4 vị trí: bảng, `pg_dump`, log/thư mục app, image | SV2 | T02 (4 lệnh probe) | cả 4 đều `0` / không dòng nào |
 | 5–7 | **Tình huống lỗi 1:** sửa 1 byte ciphertext → từ chối; tráo payload giữa 2 bản ghi (AAD) → từ chối | SV2 | T03 rồi T04 | HTTP **503**; audit `record.read` / `failure` / `decrypt_failed` |
 | 7–9 | **Least privilege + tách nhiệm vụ:** ma trận quyền AppRole, rồi thử xoay KEK bằng danh tính ứng dụng | SV2 | T06: `check_approle_privileges.py`, `prove_rotate_forbidden.py`, `POST /admin/rotation/transit-key` | 9/9 `PASS` exit 0; rotate → **403** |
 | 9–12 | **Vòng đời khóa (trọng tâm đề tài):** xoay KEK → đọc lại bản ghi cũ → rewrap DEK → đặt `min_decryption_version` → ciphertext version cũ bị chặn | SV2 dẫn lệnh, SV3 giải thích vì sao thứ tự này | T08 đủ 7 bước | `kek_version` 1→2; prefix `vault:v1:`→`vault:v2:`; v1 bị **400**; bản ghi đã rewrap vẫn 200 |
 | 12–14 | **Tình huống lỗi 2:** thu hồi lease credential DB → credential chết ngay; SecretID dùng lại bị từ chối | SV3 | T10 + `prove_secret_id_reuse.py` | trước revoke: `SELECT current_user` OK; sau revoke: `FATAL: role ... does not exist` (hoặc `password authentication failed`, tùy bản ghi lease); reuse → `PASS` |
-| 14–16 | **TLS và at rest** — xem mục 4 bên dưới (hai phương án tùy SV1 có bàn giao hay không) | SV1 | `curl.exe -k https://...` / `SHOW ssl;` **hoặc** cảnh "vì sao chưa đạt" | xem mục 4 |
-| 16–18 | Số liệu: bảng p50/p95/p99 A vs D-lab, **H1 bị bác bỏ**, trần ~110 RPS, sụp ở 100 VUs, H2 đạt | SV3 | `python bench/analyze.py "bench/results/*.csv.gz"`; mở Hình 4 | overhead +122,21% / +131,21% (gộp 5 lần/mức); D-lab 100 VUs lỗi tối đa ≈61% |
-| 18–20 | DevSecOps và kết luận: CI chặn secret, ruleset chặn push thẳng, defect công khai D-05/D-08/T13, thẻ `v0.9.0-rc1`, hướng hoàn thiện | SV3 | `git log --oneline --graph -15`; `git shortlog -sne --all`; ảnh ruleset | 2 job CI xanh; 3 tác giả; tag `v0.9.0-rc1` |
+| 14–16 | **TLS và at rest** — TLS ĐẠT 16/11; at-rest cấp volume risk-accepted (xem mục 4) | SV1 | `curl.exe -k https://...` / `openssl s_client` / `SHOW ssl;` | xem mục 4 |
+| 16–18 | Số liệu: bảng p50/p95/p99 A vs D-lab, **H1 bị bác bỏ**, trần ~110 RPS, sụp ở 100 VUs, H2 đạt | SV3 | `python bench/analyze.py "bench/results/*.csv.gz"`; mở Hình 4 | overhead +122,21% / +131,21% (gộp 5 lần/mức); D-lab 100 VUs lỗi tối đa ≈61% — số liệu D-lab 31/10–11/11 (HTTP, 1 worker/pool 5+10); phiên đo mới qua TLS chưa có biên bản |
+| 18–20 | DevSecOps và kết luận: CI chặn secret, ruleset chặn push thẳng, D-05/D-08 đã đóng (15/11), T13 đạt phần TLS (16/11) + at-rest risk-accepted, thẻ `v0.9.0-rc1`, hướng hoàn thiện | SV3 | `git log --oneline --graph -15`; `git shortlog -sne --all`; ảnh ruleset | 2 job CI xanh; 3 tác giả; tag `v0.9.0-rc1` |
 
 Tổng: 20 phút. Nếu cần rút còn 15 phút: bỏ cảnh T04 (phút 5–7 chỉ giữ T03), rút T02 còn 2 vị trí (bảng + `pg_dump`), và gộp phút 18–20 vào 16–18.
 
-## 4. Cảnh phút 14–16: hai phương án, chọn theo thực tế
+## 4. Cảnh phút 14–16: TLS đã đạt, at-rest risk-accepted
 
-**Phương án A — SV1 đã bàn giao TLS (chỉ dùng khi chạy thật được):**
+**Phương án A — mặc định (TLS đã nghiệm thu 16/11/2026, `docs/evidence/T13_2026-11-16.md`):**
 
 ```powershell
 curl.exe -k https://localhost:8200/v1/sys/health
@@ -79,23 +101,29 @@ curl.exe -k https://localhost:8443/health
 docker compose exec -T postgres psql -U postgres -d encryption_db -c "SHOW ssl;"
 ```
 
-Phải thấy: Vault trả JSON có `"initialized":true`, reverse proxy trả 200, `SHOW ssl;` = `on`. SV1 giải thích vì sao chọn TLS 1.2 trở lên, chứng chỉ lưu ở đâu, và vì sao Vault phải chuyển sang file storage.
+```bash
+# Git Bash — xem protocol/cipher thật của biên TLS
+MSYS_NO_PATHCONV=1 openssl s_client -connect localhost:8443 -servername localhost -tls1_2 </dev/null
+MSYS_NO_PATHCONV=1 openssl s_client -connect localhost:8443 -servername localhost -tls1_3 </dev/null
+```
 
-**Phương án B — T13 CHƯA ĐẠT (mặc định, theo trạng thái `main` hiện nay):**
+Phải thấy: Vault trả JSON có `"initialized":true` qua nginx, API trả 200 `{"status":"ok"}`, `SHOW ssl;` = `on`, `s_client` ra TLSv1.2 (ECDHE-RSA-AES128-GCM-SHA256) và TLSv1.3 (TLS_AES_256_GCM_SHA384). `Verify return code: 21` là đúng kỳ vọng lab: CA tự ký chưa nằm trong trust store của máy.
 
-SV1 nói thẳng, không vòng vo, theo sườn:
+SV1 giải thích:
+- nginx 1.27-alpine là TLS terminator cho cả ba ranh giới: 8200→vault:8200, 8443→api:8000, 8444→baseline:8001; TLSv1.2/1.3, cipher ECDHE.
+- Vault vẫn HTTP **nội bộ** trong network Docker — chủ đích lab (D-04); TLS chỉ ở biên ngoài. Biến thể production-intent dùng TLS native (`infrastructure/vault/config/vault.hcl`) nhưng chưa nghiệm thu.
+- Chứng chỉ tự ký sinh bởi `infrastructure/certs/gen-certs.sh` (CA riêng, SAN localhost/nginx/api/127.0.0.1), nằm trong `infrastructure/certs/out/` (gitignore). PostgreSQL đọc cert/key từ named volume `pgcerts` (container one-shot copy + chmod 600 + chown 70:70 vì bind mount Windows không giữ permission key).
+- At-rest cấp volume: BitLocker Off (probe UAC 16/11), **risk-accepted bằng văn bản**: không tự bật vì cần admin + recovery key, rủi ro khóa máy; dữ liệu vẫn được bảo vệ ở cấp ứng dụng (envelope encryption, ciphertext trong DB) và trên đường truyền (TLS). Không đo cấu hình C; điều kiện đóng là bật BitLocker cho ổ chứa VHDX của Docker hoặc chuyển PostgreSQL sang volume LUKS rồi đo lại C.
 
-1. "T13 trong kế hoạch kiểm thử yêu cầu TLS cho Vault/API/PostgreSQL và mã hóa volume. **Nhóm chưa đạt ca này.**"
-2. Chỉ vào bằng chứng: `docker-compose.yml` trên `main` vẫn là Vault **dev mode**, `VAULT_DEV_ROOT_TOKEN_ID`, HTTP, không file storage, không reverse proxy; `docs/evidence/T13_partial_2026-10-31.md` ghi rõ phần đã làm và phần chưa.
-3. Nêu rủi ro còn lại một cách cụ thể: API key và ciphertext đi qua HTTP nội bộ nên có thể bị nghe lén trong lab; dev mode mất container là mất khóa.
-4. Nêu việc cần làm để đạt: Vault file storage + TLS 1.2+, reverse proxy 8443, PostgreSQL `ssl=on`, BitLocker/volume encryption, và đo lại cấu hình **B**/**C** trong ma trận benchmark.
-5. Chốt: "Vì T13 chưa đạt và D-05/D-08 còn mở, nhóm gắn thẻ **`v0.9.0-rc1`**, không phải `v1.0.0`."
+**Phương án B — dự phòng khi stack TLS không dựng được trước giờ demo:**
 
-SV3 không được dẫn `infrastructure/docker-compose.yml` như bằng chứng TLS: PR #7 có tiêu đề nhắc TLS nhưng nội dung file là dev mode không TLS. Đây là điểm đã được ghi nhận công khai trong báo cáo.
+Chuyển sang trình chiếu biên bản `docs/evidence/T13_2026-11-16.md` + `bench/results/*_summary.json` và nói thẳng "đây là log đã ghi, không phải chạy trực tiếp". Không giả vờ chạy live. Nếu bị hỏi vì sao chưa bật BitLocker, trả lời đúng mục risk-accepted ở trên, không tuyên bố at-rest cấp volume đã đạt.
+
+SV3 không được dẫn `infrastructure/docker-compose.yml` như bằng chứng TLS đã nghiệm thu: biến thể production-intent này đã sửa để chạy độc lập nhưng chưa nghiệm thu (T13 nghiệm thu trên stack gốc). Ghi chú lịch sử: PR #7 từng có tiêu đề nhắc TLS nhưng nội dung file là dev mode không TLS — điểm đã được ghi nhận công khai trong báo cáo.
 
 ## 5. Lệnh chi tiết cho từng cảnh (copy-paste được)
 
-Tất cả lệnh dưới đây giả định đã chạy mục 2(b) để có `$API`, `$Headers`, `$AdminHeaders`.
+Tất cả lệnh dưới đây giả định đã chạy mục 2(b)–(b2) để có `$API` (`https://127.0.0.1:8443`), `$Headers`, `$AdminHeaders` và CA lab đã được tin trong store người dùng. Nếu không tin CA, thay các lệnh `Invoke-RestMethod` bằng `curl.exe -k` tương đương (truyền `-H "X-API-Key: ..."`).
 
 ### 5.1. Phút 2–4 — luồng bình thường (SV2)
 
@@ -258,12 +286,12 @@ git tag --list
 
 Điểm phải nói ra, không né:
 
-- **H1 bị bác bỏ:** overhead p95 **+122,21%** ở 10 VUs và **+131,21%** ở 50 VUs (gộp 5 lần/mức sau bổ sung 11/11; riêng phiên 31/10 là +124,91%), ngưỡng đề ra là ≤30%. Nguyên nhân: mỗi request tạo gọi `transit/datakey`, mỗi request đọc gọi `transit/decrypt`; 70% tải là tạo; API một Uvicorn worker, pool 5+10.
-- **Trần ~110 RPS:** D-lab chỉ tăng 106,87 → 110,55 RPS khi tải 10 → 50 VUs nhưng p95 tăng 123 → 839 ms. Ở 100 VUs log ghi `QueuePool limit of size 5 overflow 10 reached` và p95 xấp xỉ timeout 60 s của k6 → **sụp bão hòa**, không dùng để tính H1.
+- **H1 bị bác bỏ:** overhead p95 **+122,21%** ở 10 VUs và **+131,21%** ở 50 VUs (gộp 5 lần/mức sau bổ sung 11/11; riêng phiên 31/10 là +124,91%), ngưỡng đề ra là ≤30%. Nguyên nhân: mỗi request tạo gọi `transit/datakey`, mỗi request đọc gọi `transit/decrypt`; 70% tải là tạo; thời điểm đo (31/10–11/11) API chạy **một Uvicorn worker, pool 5+10** — cấu hình cũ. Từ 15/11 (D-08 đóng) là **2 worker, pool 20+20**, connection không giữ khi gọi Vault; số liệu trên chưa phản ánh cấu hình mới.
+- **Trần ~110 RPS:** D-lab chỉ tăng 106,87 → 110,55 RPS khi tải 10 → 50 VUs nhưng p95 tăng 123 → 839 ms. Ở 100 VUs log ghi `QueuePool limit of size 5 overflow 10 reached` (pool cũ 5+10; hiện tại 20+20) và p95 xấp xỉ timeout 60 s của k6 → **sụp bão hòa**, không dùng để tính H1.
 - **H2 đạt:** T09 0% lỗi ở 20 VUs/1 phút; E-lab 3 lần 50 VUs/3 phút, 6 thao tác xoay đều HTTP 200, 0,00% lỗi.
-- **`D-lab` không phải `D`:** chưa có TLS nên đây là **cận dưới** của chi phí mã hóa. Cấu hình B/C chưa đo vì chờ T13.
+- **`D-lab` không phải `D`:** các số liệu trên đo 31/10–11/11 qua HTTP, trước khi có TLS, nên là **cận dưới** của chi phí mã hóa. Từ 16/11 stack đã có TLS (k6 chạy `insecureSkipTLSVerify: true` qua 8443, baseline qua 8444); kết quả B/D mới chỉ được đưa vào khi có biên bản. Cấu hình C không đo (BitLocker Off, risk-accepted).
 - **D-09:** lần tái lập 11/11 phát hiện `vault-init` exit 1 do truyền `secret_id_ttl`/`secret_id_num_uses` vào `generate_secret_id` (hvac không nhận; hai tham số đó thuộc cấp role). Đã sửa + regression test. Bài học: biên bản "ĐẠT" phải tái lập được từ `main` sạch.
-- Thẻ **`v0.9.0-rc1`**, không phải `v1.0.0`, vì T13 chưa đạt và D-05/D-08 còn mở.
+- Thẻ **`v0.9.0-rc1`**, không phải `v1.0.0`: D-05/D-08 đã đóng (15/11) và T13 đã đạt phần TLS (16/11), nhưng at-rest cấp volume mới risk-accepted, T14 chưa đủ B/C/D đầy đủ và D' chưa đo benchmark.
 
 ## 6. Chuẩn bị phản biện — mỗi người tự trả lời phần mình
 
@@ -273,9 +301,9 @@ git tag --list
 | SV2 | AAD gồm những gì và chống được tấn công nào? | `record_id:record_type`; chống tráo ciphertext giữa bản ghi (T04) |
 | SV2 | Vì sao `rewrap` không cần giải mã payload? | Vault bọc lại DEK bằng KEK version mới; payload vẫn mã hóa bằng DEK cũ không đổi |
 | SV2 | SecretID `num_uses=1` gây bất tiện gì khi vận hành? | Mỗi lần restart API phải cấp SecretID mới bằng operator (`issue_workload_secret.py`) — đánh đổi có chủ ý |
-| SV1 | Vì sao T13 chưa đạt và cần gì để đạt? | Xem mục 4 phương án B; nói rõ dev mode/HTTP và các bước còn thiếu |
-| SV1 | `vault_admin` SUPERUSER rủi ro gì? | D-05: leo thang quyền trong lab; production phải dùng role tối thiểu, tách quyền tạo role |
-| SV3 | Vì sao H1 bị bác bỏ mà vẫn nộp? | Kết quả đo trung thực có giá trị hơn kết quả đẹp; đã chỉ ra nguyên nhân và cấu hình D' cần đo |
+| SV1 | T13 đạt phần TLS thế nào, vì sao at-rest chỉ risk-accepted? | nginx terminator 3 cổng (8200/8443/8444), TLS 1.2/1.3, PG ssl=on; Vault HTTP nội bộ là chủ đích D-04; BitLocker Off không tự bật (rủi ro khóa máy), điều kiện đóng: bật BitLocker/LUKS rồi đo lại C |
+| SV1 | `vault_admin` bỏ SUPERUSER và `SET FALSE` chặn được gì? | D-05 đã đóng: `LOGIN CREATEROLE NOINHERIT`, grant `app_writer ... WITH ADMIN TRUE, SET FALSE` chặn leo thang qua `SET ROLE`; kiểm chứng 15/11, fix nằm trong PR #14 (worktree đã cherry-pick) |
+| SV3 | Vì sao H1 bị bác bỏ mà vẫn nộp? | Kết quả đo trung thực có giá trị hơn kết quả đẹp; đã chỉ ra nguyên nhân, sửa D-08 (2 worker, pool 20+20) và cấu hình D' cần đo |
 | SV3 | CI chặn được những gì, không chặn được gì? | Gitleaks quét toàn bộ lịch sử (`--all`) + unit test; không chặn được secret đã encode tinh vi hoặc lộ qua kênh khác |
 | SV3 | Vì sao ruleset cần 1 approval và trưởng nhóm không tự approve được? | Tách người viết và người duyệt; PR #5 từng bị chặn merge dù CI xanh |
 
@@ -284,6 +312,8 @@ git tag --list
 ```powershell
 docker compose down -v
 docker rm -f detai20-baseline 2>$null
+# Gỡ CA lab khỏi store người dùng (đã tin ở mục 2(b2))
+Get-ChildItem Cert:\CurrentUser\Root | Where-Object { $_.Subject -eq "CN=UTH Lab CA" } | Remove-Item
 docker volume ls
 docker ps -a
 ```

@@ -58,13 +58,23 @@ def main(pdf_path: Path, markdown_path: Path, output_path: Path) -> None:
                 result[title] = bookmarks[title]
     else:
         pages = [normalize(page.get_text("text")) for page in document]
-        toc_last = max((i for i, text in enumerate(pages) if "MỤC LỤC" in text), default=0)
+        # Skip every TOC page, not just the one bearing the "MỤC LỤC" heading:
+        # a long TOC spills onto following pages, all marked by dot leaders.
+        toc_last = max(
+            (i for i, text in enumerate(pages)
+             if "MỤC LỤC" in text or re.search(r"\.{10,}", text)),
+            default=0,
+        )
         for _level, title in expected:
             needle = title[:60]
             for index in range(toc_last + 1, len(pages)):
                 if needle in pages[index]:
                     result[title] = index + 1
                     break
+
+    # Release the PDF handle before Word overwrites it on the second export
+    # pass; an open pymupdf handle locks the file on Windows.
+    document.close()
 
     output_path.write_text(json.dumps(result, ensure_ascii=False, indent=2), encoding="utf-8")
     missing = [title for _level, title in expected if title not in result]

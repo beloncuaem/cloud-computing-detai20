@@ -32,7 +32,7 @@ Ngưỡng cảnh báo giải mã bất thường: **200 request `transit/decrypt
 
 ### 3.1. Stack dự phòng bằng Docker (dùng để chạy T01–T16)
 
-Stack này nằm trong PR hạ tầng đi kèm và dùng Vault dev mode. Đây là môi trường **lab**, không thay thế stack Vault file storage + TLS của SV1.
+Stack này dùng Vault dev mode (HTTP **nội bộ** trong network Docker — chủ đích lab D-04) nhưng từ 16/11 đã có nginx làm TLS terminator (8200/8443/8444, TLSv1.2/1.3) và PostgreSQL `ssl=on`. Đây là môi trường **lab**; biến thể Vault file storage + TLS native của SV1 (`infrastructure/`) chưa nghiệm thu.
 
 ```powershell
 # Từ thư mục gốc repository
@@ -75,7 +75,7 @@ Các lệnh `docker compose ...` chạy từ thư mục gốc repository. Nếu 
 
 ## 4. Ma trận kiểm thử
 
-| ID | Hạng mục | Mục tiêu | Kỳ vọng | Trạng thái (cập nhật 11/11/2026) |
+| ID | Hạng mục | Mục tiêu | Kỳ vọng | Trạng thái (cập nhật 16/11/2026) |
 |---|---|---|---|---|
 | T01 | Envelope encryption | Round-trip create/read | Giá trị đọc lại khớp; DB chỉ có ciphertext, nonce, encrypted DEK | ĐẠT |
 | T02 | Plaintext leakage | Không có plaintext trong DB/dump | 0 kết quả khi tìm chuỗi test | ĐẠT (4/4 vị trí = 0) |
@@ -89,7 +89,7 @@ Các lệnh `docker compose ...` chạy từ thư mục gốc repository. Nếu 
 | T10 | Lease lifecycle | Gia hạn/thu hồi lease | Credential bị thu hồi không đăng nhập được | ĐÃ ĐẠT (Lease 31/10; SecretID 05/11) — D-02 đóng |
 | T11 | Secret scanning | Gitleaks chặn secret | 0 finding trên repo; secret giả bị phát hiện | ĐẠT |
 | T12 | Branch protection | Chặn push trực tiếp/force push; bắt buộc PR + approval | GitHub từ chối; PR chỉ merge sau approval | ĐẠT một phần (API + ảnh) |
-| T13 | TLS / at rest | Bảo vệ trên đường truyền và ổ đĩa | TLS bật; BitLocker/volume encryption bật | CHƯA ĐẠT — thiếu TLS |
+| T13 | TLS / at rest | Bảo vệ trên đường truyền và ổ đĩa | TLS bật; BitLocker/volume encryption bật | ĐẠT phần TLS 16/11 (nginx terminator 8200/8443/8444, TLS1.2/1.3, PG ssl=on); at-rest cấp volume risk-accepted (BitLocker Off, probe UAC) — docs/evidence/T13_2026-11-16.md |
 | T14 | Benchmark | Đo p50/p95/p99, RPS, lỗi | Đủ 10/50/100 VUs, 5 lần; H1, H2 | ĐẠT MỘT PHẦN — A đủ 5 lần/mức (31/10 + 11/11), D-lab 5 lần, E-lab 3 lần; H1 bác bỏ; thiếu B/C/D |
 | T15 | Cost / cleanup / reproducibility | Dựng lại và dọn sạch | Lệnh dựng lại chạy được; không còn tài nguyên | ĐẠT (31/10: 24 s, smoke 9/9; 11/11: `down -v` → `up -d --build` từ `main`, `vault-init` exit 0, smoke 9/9 — đóng D-09) |
 | T16 | Anomaly alert | Cảnh báo giải mã bất thường | 200 decrypt/phút sinh cảnh báo; tải thường không báo | ĐẠT |
@@ -490,9 +490,9 @@ git reset --hard origin/main   # chỉ dùng sau khi chắc chắn không có th
 
 **Mục tiêu:** Kiểm chứng dữ liệu được bảo vệ trên đường truyền và trên ổ đĩa.
 
-**Trạng thái:** stack dự phòng dùng Vault dev mode qua HTTP, chưa có TLS → **chưa đạt**. Đây là phần việc của SV1 (Vault file storage + TLS + reverse proxy cho API). Ghi rõ trong báo cáo là giới hạn lab, không tuyên bố đã đạt.
+**Trạng thái (16/11/2026):** ĐẠT phần TLS trên stack gốc với nginx làm TLS terminator (Vault 8200, API 8443, baseline 8444; TLS 1.2/1.3; PostgreSQL ssl=on). At-rest cấp volume risk-accepted vì BitLocker Off — không đo cấu hình C. Biến thể Vault file storage + TLS native của SV1 (infrastructure/) đã sửa để chạy độc lập nhưng chưa nghiệm thu. Bằng chứng: docs/evidence/T13_2026-11-16.md.
 
-**Khi SV1 hoàn thành:**
+**Lệnh kiểm tra (đã chạy 16/11, xem biên bản T13):**
 
 ```powershell
 curl.exe -k -i https://localhost:8200/v1/sys/health
@@ -523,13 +523,13 @@ docker run --rm detai20-api:local sh -c `
 | Mã | Cấu hình | Trạng thái với app hiện tại |
 |---|---|---|
 | A | Không mã hóa, HTTP (baseline) | Đã có `bench/baseline/server.py` (chỉ dùng benchmark, không merge vào app); chạy cổng 8001 |
-| B | TLS | Chờ SV1 |
-| C | TLS + mã hóa volume | Chờ SV1 + BitLocker |
-| D | TLS + envelope encryption | Đo được phần envelope; TLS chờ SV1 (tạm gọi D-lab nếu chạy HTTP) |
-| E | D + đang xoay vòng khóa | Đo được D-lab + rotation; ghi rõ thiếu TLS |
-| D' | D sau tối ưu (cache DEK) | Sau khi SV2 tối ưu |
+| B | TLS | Hạ tầng TLS đã có từ 16/11 (baseline qua nginx 8444); kết quả chỉ ghi khi có biên bản |
+| C | TLS + mã hóa volume | **Không đo** — BitLocker Off, risk-accepted 16/11 |
+| D | TLS + envelope encryption | Đo qua https 8443 (nginx); số liệu 31/10–11/11 là D-lab (HTTP, trước TLS) |
+| E | D + đang xoay vòng khóa | E-lab 31/10 đo trước TLS — ghi rõ khác biệt với E đầy đủ |
+| D' | D sau tối ưu (cache DEK) | D-08 đã đóng 15/11 (2 worker, pool 20+20); bật cache bằng `DEK_CACHE_TTL_SECONDS=120`; chưa đo benchmark |
 
-Không được ghi kết quả D-lab thành D trong báo cáo. Nếu buộc phải đo trước khi có TLS, ghi tên `D-lab` và nêu rõ khác biệt.
+Không được ghi kết quả D-lab thành D trong báo cáo. Số liệu D-lab (31/10–11/11) đo qua HTTP trước khi có TLS; từ 16/11 stack đã có TLS nên phép đo mới qua https 8443 là D (baseline qua 8444 là B). Cấu hình C không đo (risk-accepted).
 
 **Quy trình:**
 
@@ -555,6 +555,8 @@ docker run --rm -v "${PWD}:/work" -w /work grafana/k6:0.54.0 run `
   -e VUS=50 -e DURATION=3m `
   --out csv=bench/results/D-lab_50_run1.csv bench/k6/mixed.js
 ```
+
+Từ 16/11, đổi `BASE_URL` sang `https://host.docker.internal:8443` cho cấu hình D (`mixed.js` có `insecureSkipTLSVerify: true` nên chấp nhận CA tự ký); baseline cấu hình B dùng `https://host.docker.internal:8444`. Các lệnh HTTP 8000 ở trên giữ làm hồ sơ phiên D-lab cũ.
 
 **Phân tích:**
 
@@ -602,6 +604,8 @@ docker run --rm -v "${PWD}:/work" -w /work python:3.12-slim `
 - H1 vẫn **bị bác bỏ** với A gộp: +122,21% (10 VUs), +131,21% (50 VUs). Tách phiên: 31/10 cho +122,21% / +124,91%; 11/11 cho +121,06% / +184,89%. Không cách tính nào đạt ngưỡng ≤ 30%.
 - **Giới hạn hiệu lực:** hai phiên A khác nhau về thủ tục (31/10 chạy sau D-lab trên volume đã có dữ liệu, không restart stack; 11/11 chạy trên volume sạch sau `down -v`). Ở 50/100 VUs phiên 11/11 nhanh hơn hẳn (RPS 237,33 và 275,64 so với 169,14 và 163,61). Nguyên nhân chưa được kiểm chứng; không loại trừ trạng thái máy. Số gộp chỉ để đáp ứng yêu cầu ≥ 5 lần, không phải một phép đo đồng nhất.
 - Việc còn lại để T14 đạt đầy đủ: đo B/C (chờ TLS + volume encryption của SV1), đo D đầy đủ, đo lại A và D-lab trong cùng một phiên, và đo E-lab đủ 5 lần sau khi có rewrap.
+
+*Ghi chú 16/11: TLS đã có nên B/D đo được qua nginx 8444/8443; riêng C không đo vì BitLocker Off (risk-accepted). Dòng trên giữ nguyên làm hồ sơ phiên 11/11.*
 
 **Bằng chứng:** CSV thô, bảng Markdown do `analyze.py` xuất, ảnh summary k6, ảnh thời điểm rotation, mô tả máy.
 
@@ -692,7 +696,7 @@ docker run --rm -v "${PWD}:/work" -w /work python:3.12-slim `
 | D-01 | Cao | Policy app cấp `update` cho `transit/keys/app-data-key/rotate` và `read` cho metadata khóa | `api/scripts/setup_vault.py` | SV2 | Đã sửa và kiểm chứng ĐẠT (05/11); checker exit 0, rotate 403 — Đóng |
 | D-02 | Cao | AppRole `secret_id_ttl=0s`, `secret_id_num_uses=0` | `api/scripts/setup_vault.py` | SV2 | Đã sửa thành 10m và 1 lần dùng; kiểm chứng replay bị từ chối (05/11) — Đóng |
 | D-03 | Cao | Chưa có rewrap và `min_decryption_version` sau khi xoay KEK | `api/scripts/rewrap_dek.py` | SV2 | Đã có đủ 7 bước T08, rewrap thành công, chặn v1 thành công (05/11) — Đóng |
-| D-04 | Trung bình | Stack dự phòng dùng Vault dev mode, HTTP, root token; không dùng cho production | `docker-compose.yml` | SV1/SV3 | Chấp nhận trong lab, ghi rõ |
+| D-04 | Trung bình | Stack dự phòng dùng Vault dev mode, HTTP **nội bộ** (TLS ở biên nginx từ 16/11), root token; không dùng cho production | `docker-compose.yml` | SV1/SV3 | Chấp nhận trong lab, ghi rõ |
 | D-05 | Trung bình | `vault_admin` là PostgreSQL SUPERUSER | `sql/00-create-roles.sql` | SV2 (bản phân công gốc giao SV1) | Đã bỏ SUPERUSER: `NOSUPERUSER NOCREATEDB CREATEROLE NOINHERIT`, dữ liệu qua `app_writer`; kiểm tra mã + thiết kế quyền ĐẠT — 15/11 — Đóng |
 | D-06 | Thấp | `.vscode/settings.json` còn tracked; `.gitignore` từng bỏ qua CSV benchmark | repo | SV2/SV3 | `.vscode/` đã đưa vào `.gitignore` và bỏ khỏi index — Đóng |
 | D-07 | Trung bình | Chưa có cấu hình baseline plaintext (A) cho H1 | `bench/baseline/server.py` | SV2/SV3 | Đã có baseline, giữ tách khỏi app |
@@ -705,13 +709,15 @@ Chỉ tag `v1.0.0` khi:
 
 - T01–T05, T07, T09–T12, T15, T16 đạt.
 - T06 và T08 đạt sau khi D-01/D-03 được sửa; nếu chưa, ghi rõ là "chưa đạt" và không tuyên bố đã kiểm chứng least privilege/rewrap.
-- T13 đạt sau khi SV1 bàn giao TLS; nếu không, ghi rõ giới hạn.
-- T14 có đủ dữ liệu cho ít nhất D/E và nêu rõ A/B/C; H1 chỉ kết luận khi có A; H2 kết luận từ E-lab (chưa TLS) và ghi rõ khác biệt với E.
+- T13: phần TLS ĐẠT 16/11 (nginx terminator); at-rest cấp volume risk-accepted (BitLocker Off) — ghi rõ giới hạn, không tuyên bố đạt toàn phần.
+- T14 có đủ dữ liệu cho ít nhất D/E và nêu rõ A/B/C; H1 chỉ kết luận khi có A; H2 kết luận từ E-lab (đo 31/10, trước TLS) và ghi rõ khác biệt với E.
 - Không còn secret thật trong repo/history; Gitleaks xanh trên PR cuối.
 - Ruleset yêu cầu `gitleaks` và 1 approval; push trực tiếp bị chặn.
 - Báo cáo có bảng kết quả, ảnh bằng chứng, phần rủi ro còn lại và kế hoạch mất khóa.
 
 **Trạng thái đối chiếu ngày 15/11/2026:** T06 và T08 đã ĐẠT (SV2 nghiệm thu 05/11, SV3 tái kiểm chứng độc lập 11/11 trên stack dựng lại từ `main`). **T13 vẫn CHƯA ĐẠT**, B/C chưa đo. D-05 đã đóng: `vault_admin` bỏ `SUPERUSER`, giữ `CREATEROLE NOINHERIT`; D-08 đã đóng: pool 20+20, 2 worker, connection tách khỏi Vault call; DEK cache sẵn sàng cho D'. Biên bản evidence: `docs/evidence/D05_D08_2026-11-15.md`. Benchmark D' cần đo trước khi tag `v1.0.0`.
+
+**Cập nhật 16/11/2026:** T13 **ĐẠT phần TLS** trên stack gốc (nginx terminator 8200/8443/8444, TLSv1.2/1.3, PostgreSQL `ssl=on`); at-rest cấp volume **risk-accepted** (BitLocker Off, probe UAC) nên không đo cấu hình C. Biến thể Vault file storage + TLS native (`infrastructure/`) đã sửa để chạy độc lập nhưng chưa nghiệm thu. Bằng chứng: `docs/evidence/T13_2026-11-16.md`. D-05/D-08 giữ trạng thái đóng; benchmark D' và các cấu hình qua TLS vẫn cần đo trước khi tag `v1.0.0`.
 
 **Điều kiện bổ sung rút ra từ D-09:** một ca chỉ được ghi "ĐẠT" khi có lệnh tái lập chạy được từ `main` sạch (`docker compose down -v` → `up -d --build` → `vault-init` exit 0). Biên bản ghi trên máy cá nhân mà mã đã commit không dựng lại được thì chưa đủ điều kiện nghiệm thu.
 
@@ -731,4 +737,4 @@ Lịch gốc dưới đây được giữ làm hồ sơ. **Thay đổi đã ch�
 | 07/11 | Dự phòng | Cả nhóm | — |
 | 11/11 | Tái lập stack từ `main`, tái kiểm chứng T06/T08/T15, sửa D-09, đo bổ sung cấu hình A | SV3 | Đã xong |
 
-**Việc còn lại trước buổi demo:** SV1 bàn giao TLS (T13) hoặc chuẩn bị cảnh "vì sao chưa đạt" theo mục 4 phương án B của kịch bản; đo benchmark cấu hình D' (`DEK_CACHE_TTL_SECONDS=120`, 10/50/100 VUs, 5 lần/mức); cả nhóm rehearsal 2 lần có bấm giờ và điền nhật ký ở mục 8 của kịch bản demo.
+**Việc còn lại trước buổi demo:** TLS đã có (T13 đạt phần TLS 16/11, at-rest risk-accepted) — SV1 dẫn cảnh TLS theo mục 4 phương án A của kịch bản, phương án B chỉ còn là dự phòng khi stack không dựng được; đo benchmark cấu hình D' (`DEK_CACHE_TTL_SECONDS=120`, 10/50/100 VUs, 5 lần/mức) và các cấu hình qua TLS khi có biên bản; cả nhóm rehearsal 2 lần có bấm giờ và điền nhật ký ở mục 8 của kịch bản demo.
