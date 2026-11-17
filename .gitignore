@@ -1,4 +1,9 @@
 # Environment & Secrets
+infrastructure/certs/*
+!infrastructure/certs/gen-certs.sh
+!infrastructure/certs/README.md
+*.crt
+*.srl
 .env
 .vscode/
 operator-credentials.json

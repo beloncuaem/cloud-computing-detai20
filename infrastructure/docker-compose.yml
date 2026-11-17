@@ -1,6 +1,6 @@
 services:
   vault:
-    image: hashicorp/vault:latest
+    image: hashicorp/vault:1.20
     container_name: vault-kms
     ports:
       - "8200:8200"
@@ -9,37 +9,70 @@ services:
       VAULT_SKIP_VERIFY: "true"
     volumes:
       - ./vault/config:/vault/config
-      - ./certs:/vault/certs
+      - ./certs/out:/vault/certs:ro
       - vault_data:/vault/data
     command: server -config=/vault/config/vault.hcl
 
   postgres:
-    image: postgres:15-alpine
+    image: postgres:16-alpine
     container_name: postgres-db
     environment:
       POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: secretpassword
+      POSTGRES_PASSWORD: "${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}"
       POSTGRES_DB: encryption_db
     ports:
       - "5432:5432"
     volumes:
-      - ./certs:/var/lib/postgresql/certs
+      - pgcerts:/pgcerts:ro
       - postgres_data:/var/lib/postgresql/data
+      - ../api/sql:/docker-entrypoint-initdb.d:ro
     command: >
       postgres
       -c ssl=on
-      -c ssl_cert_file=/var/lib/postgresql/certs/postgres.crt
-      -c ssl_key_file=/var/lib/postgresql/certs/postgres.key
+      -c ssl_cert_file=/pgcerts/postgres.crt
+      -c ssl_key_file=/pgcerts/postgres.key
+    depends_on:
+      pgcerts:
+        condition: service_completed_successfully
+
+  pgcerts:
+    image: alpine:3.20
+    volumes:
+      - ./certs/out:/src:ro
+      - pgcerts:/dst
+    command: >
+      sh -c "cp /src/postgres.crt /src/postgres.key /dst/ && chmod 600 /dst/postgres.key && chown 70:70 /dst/postgres.key && chmod 644 /dst/postgres.crt"
+    restart: "no"
+
+  api:
+    build:
+      context: ../api
+    image: detai20-api:local
+    environment:
+      DATABASE_URL: "postgresql+psycopg://app_user:${APP_DB_PASSWORD:-local_app_password}@postgres:5432/encryption_db?sslmode=require"
+      DB_SSLMODE: "require"
+      VAULT_ADDR: "http://vault:8200"
+      API_KEY: "${API_KEY:?set API_KEY}"
+      ADMIN_API_KEY: "${ADMIN_API_KEY:?set ADMIN_API_KEY}"
+    depends_on:
+      postgres:
+        condition: service_started
+      vault:
+        condition: service_started
+    restart: unless-stopped
 
   nginx:
-    image: nginx:alpine
+    image: nginx:1.27-alpine
+    depends_on:
+      - api
     container_name: nginx-proxy
     ports:
       - "8443:443"
     volumes:
       - ./nginx/conf.d:/etc/nginx/conf.d
-      - ./certs:/etc/nginx/certs
+      - ./certs/out:/etc/nginx/certs:ro
 
 volumes:
   vault_data:
   postgres_data:
+  pgcerts:

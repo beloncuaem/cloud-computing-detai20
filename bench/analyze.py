@@ -207,18 +207,43 @@ def main() -> None:
         )
 
     print("\nOverhead against the plaintext baseline (H1):\n")
-    print("| VUs | Baseline p95 | Target p95 | Overhead |")
-    print("|---:|---:|---:|---:|")
-    for config, vus in sorted(medians):
-        if config != "A":
-            continue
-        baseline = medians[(config, vus)]
-        for target in ("D", "D-lab"):
-            candidate = medians.get((target, vus))
-            if candidate is None:
+    print("| Baseline | Target | VUs | Baseline p95 | Target p95 | Overhead |")
+    print("|---|---|---:|---:|---:|---:|")
+    pairs = (("A", ("D-lab", "E-lab")), ("B", ("D", "Dprime", "E")))
+    for baseline_config, targets in pairs:
+        for vus in (10, 50, 100):
+            baseline = medians.get((baseline_config, vus))
+            if baseline is None:
                 continue
-            overhead = (candidate - baseline) / baseline * 100 if baseline else float("nan")
-            print(f"| {vus} | {baseline:.2f} | {candidate:.2f} | {overhead:+.2f}% |")
+            for target in targets:
+                candidate = medians.get((target, vus))
+                if candidate is None:
+                    continue
+                overhead = (candidate - baseline) / baseline * 100 if baseline else float("nan")
+                print(
+                    f"| {baseline_config} | {target} | {vus} | {baseline:.2f} | "
+                    f"{candidate:.2f} | {overhead:+.2f}% |"
+                )
+
+    print("\nDEK cache effect, D (TTL=0) vs Dprime (TTL=120s):\n")
+    print("| VUs | D p95 | Dprime p95 | Change | D RPS | Dprime RPS |")
+    print("|---:|---:|---:|---:|---:|---:|")
+    for vus in (10, 50, 100):
+        cold = medians.get(("D", vus))
+        warm = medians.get(("Dprime", vus))
+        if cold is None or warm is None:
+            continue
+        change = (warm - cold) / cold * 100 if cold else float("nan")
+        cold_rps = statistics.median(
+            item.rps for item in grouped[("D", vus)] if item.rps == item.rps
+        )
+        warm_rps = statistics.median(
+            item.rps for item in grouped[("Dprime", vus)] if item.rps == item.rps
+        )
+        print(
+            f"| {vus} | {cold:.2f} | {warm:.2f} | {change:+.2f}% | "
+            f"{cold_rps:.2f} | {warm_rps:.2f} |"
+        )
 
 
 if __name__ == "__main__":

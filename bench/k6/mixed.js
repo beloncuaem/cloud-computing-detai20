@@ -24,6 +24,8 @@ if (!API_KEY) {
 }
 
 export const options = {
+  // Lab dùng CA tự ký (infrastructure/certs); production phải bỏ dòng này.
+  insecureSkipTLSVerify: true,
   scenarios: {
     mixed: {
       executor: 'constant-vus',

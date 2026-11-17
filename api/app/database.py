@@ -69,6 +69,7 @@ class DatabaseManager:
             host=settings.db_host,
             port=settings.db_port,
             database=settings.db_name,
+            query={"sslmode": settings.db_sslmode},
         )
         engine = create_engine(
             url,
