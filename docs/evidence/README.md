@@ -33,7 +33,8 @@
 | `T16_alert_2026-11-14.png` | T16: burst 200 decrypt bằng demo token, ALERT latency 0,3s, EXIT=2 | 14/11/2026 | Hợp lệ |
 | `pr10_ci_green.png` | PR #10: workflow `security-gate` run #21 Status Success, `gitleaks` + `unit-tests` đều xanh | 14/11/2026 | Hợp lệ |
 | `smoke_ps1_execution_policy_2026-11-14.md` | Chạy thật `smoke-test.ps1` bằng Bypass phạm vi tiến trình (9/9, hai chế độ credential); nguyên nhân gốc policy Restricted + chứng minh không nới policy; khôi phục `USE_VAULT_DB_CREDS=true`; mục lục 9 ảnh thật 14/11 | 14/11/2026 | Hợp lệ (SV3) |
-| `D05_D08_2026-11-15.md` | D-05: `vault_admin` bỏ SUPERUSER (`NOSUPERUSER NOCREATEDB CREATEROLE NOINHERIT`), không đọc trực tiếp dữ liệu; D-08: pool 20+20, 2 worker, connection tách khỏi Vault call, DEK cache sẵn sàng cho D'; lệnh kiểm tra quyền và đối chiếu mã | 15/11/2026 | Hợp lệ (SV3 kiểm tra mã) |
+| `D05_D08_2026-11-15.md` | D-05: `vault_admin` bỏ SUPERUSER (`NOSUPERUSER NOCREATEDB CREATEROLE NOINHERIT`), không đọc trực tiếp dữ liệu; D-08: pool 20+20, 2 worker, connection tách khỏi Vault call, DEK cache sẵn sàng cho D'; lệnh kiểm tra quyền và đối chiếu mã | 15/11/2026 | Hợp lệ (SV2 kiểm tra mã; SV3 đính chính + nghiệm thu lại 15/11) |
+| `D05_D08_nghiemthu_SV3_2026-11-15.md` | SV3 nghiệm thu độc lập D-05/D-08 trên stack dựng lại từ `dd287d1`: 6 phép thử quyền thật (phát hiện `SET ROLE` đọc được bảng, kiểm chứng fix `SET FALSE`), 12/12 smoke + rotation, 16/16 test chạy lại; D-08 ĐẠT, D' chưa đo, T13 chưa đạt | 15/11/2026 | Hợp lệ (SV3) |
 
 | `T13_2026-11-16.md` | T13: TLS thật qua nginx (8200/8443/8444, TLS1.2+1.3, PG ssl=on, pg_stat_ssl TLSv1.3); at-rest cấp volume risk-accepted vì BitLocker Off (probe UAC); secret không trong image; envelope qua TLS; D-05 t/f/f trên volume mới | 16/11/2026 | Hợp lệ (SV3) |
 

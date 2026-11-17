@@ -45,5 +45,6 @@ $$;
 GRANT CONNECT ON DATABASE encryption_db TO app_user;
 GRANT CONNECT ON DATABASE encryption_db TO vault_admin;
 GRANT CONNECT ON DATABASE encryption_db TO app_writer;
--- ADMIN OPTION lets vault_admin grant app_writer to dynamic roles without inheriting it.
-GRANT app_writer TO vault_admin WITH ADMIN OPTION;
+-- ADMIN lets vault_admin grant app_writer to dynamic roles; SET FALSE blocks SET ROLE
+-- escalation (NOINHERIT alone does not). PostgreSQL 16+ syntax; PG15 has no SET option.
+GRANT app_writer TO vault_admin WITH ADMIN TRUE, SET FALSE;

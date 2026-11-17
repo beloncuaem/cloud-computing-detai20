@@ -19,7 +19,7 @@ def test_vault_admin_sql_is_not_superuser() -> None:
     assert "NOINHERIT" in sql
     assert "CREATEROLE" in sql
     assert "app_writer" in sql
-    assert "WITH ADMIN OPTION" in sql
+    assert "WITH ADMIN TRUE, SET FALSE" in sql
 
 
 def test_schema_grants_dml_to_app_writer_not_vault_admin() -> None:
